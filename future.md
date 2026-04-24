@@ -1,4 +1,6 @@
-improve the chat showing the deepgrep animation more highlighted and notice able in the claude code chat flow.
+improve the how to use with the cover image.
+
+remove benfits from side panel and move it alegnetically to the how to use screen - change it to make it looks simple easy and understandable.
 ____
 creating a benchmark and proving the power of deepgrep over regular use of claude code.
 ____

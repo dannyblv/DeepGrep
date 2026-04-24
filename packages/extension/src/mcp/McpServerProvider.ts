@@ -68,7 +68,7 @@ export class McpServerProvider implements vscode.Disposable {
     const { command, args } = this.serverCommand();
     const provider: vscode.McpServerDefinitionProvider = {
       provideMcpServerDefinitions: () => [
-        new vscode.McpStdioServerDefinition('DeepGrep', command, args, this.serverEnv()),
+        new vscode.McpStdioServerDefinition('⬡ DeepGrep', command, args, this.serverEnv()),
       ],
     };
     try {

@@ -85,13 +85,50 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await mcpProvider.start();
   context.subscriptions.push(mcpProvider);
 
-  // ── MCP activity watcher: animates the webview ⬡ on each tool call ─────────
+  // ── MCP activity watcher: animates webview ⬡ and status bar on each tool call
   const activityPath = resolve(workspaceRoot, '.deepgrep', 'mcp-activity.json');
   const activityWatcher = vscode.workspace.createFileSystemWatcher(activityPath);
+  let activityTimer: ReturnType<typeof setTimeout> | null = null;
+  let resolveProgress: (() => void) | null = null;
   const handleActivity = () => {
     try {
-      const { tool } = JSON.parse(readFileSync(activityPath, 'utf8'));
-      if (typeof tool === 'string') graphPanel?.notifyToolQuery(tool);
+      const payload = JSON.parse(readFileSync(activityPath, 'utf8')) as { tool?: unknown; served?: unknown };
+      const { tool, served } = payload;
+      if (typeof tool === 'string') {
+        // Update cumulative prompt-impact stats in the DB. The Rust MCP server
+        // is read-only, so this is the single writer. `served` may be missing
+        // on older activity payloads — treat it as zero rather than skipping.
+        const servedNum = typeof served === 'number' ? served : 0;
+        try { db?.incrementQueryStats(servedNum); } catch { /* DB busy — next activity will retry */ }
+
+        graphPanel?.notifyToolQuery(tool);
+        graphPanel?.sendStats();
+        sidebar?.recordQuery(servedNum);
+
+        // Spin the status bar
+        if (activityTimer) clearTimeout(activityTimer);
+        setStatus(`$(loading~spin) ⬡ DeepGrep: ${tool}`, `DeepGrep — querying ${tool}`);
+        activityTimer = setTimeout(() => {
+          activityTimer = null;
+          const nodeCount = db?.getStats().node_count ?? 0;
+          setStatus(
+            `$(database) DeepGrep: ${nodeCount.toLocaleString()} nodes`,
+            'DeepGrep — click to view logs',
+          );
+        }, 2500);
+
+        // Dismiss any in-flight toast then show a new one
+        resolveProgress?.();
+        vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: '⬡ DeepGrep', cancellable: false },
+          (progress) => {
+            progress.report({ message: `${tool}…` });
+            return new Promise<void>(res => { resolveProgress = res; });
+          },
+        );
+        // Auto-dismiss after 2 s
+        setTimeout(() => { resolveProgress?.(); resolveProgress = null; }, 2000);
+      }
     } catch { /* file missing or malformed — ignore */ }
   };
   activityWatcher.onDidChange(handleActivity);

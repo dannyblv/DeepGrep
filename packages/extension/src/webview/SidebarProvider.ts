@@ -37,24 +37,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   refresh(): void {
     if (!this._view) return;
     try {
-      const raw = this._db.getStats();
-      this._view.webview.postMessage({
-        type: 'stats',
-        data: {
-          node_count: raw.node_count,
-          edge_count: raw.edge_count,
-          last_indexed: raw.last_indexed ? parseInt(String(raw.last_indexed), 10) : null,
-          last_index_duration_ms: raw.last_index_duration_ms
-            ? parseInt(String(raw.last_index_duration_ms), 10)
-            : null,
-          schema_version: raw.schema_version,
-          token_savings_estimate: raw.estimated_token_savings,
-          query_count: raw.query_count,
-        },
-      });
+      this._view.webview.postMessage({ type: 'stats', data: this._db.getStats() });
     } catch {
       // DB not ready yet
     }
+  }
+
+  recordQuery(_served: number): void {
+    this.refresh();
   }
 
   setIndexing(active: boolean, message = ''): void {
@@ -385,9 +375,10 @@ window.addEventListener('message',({data:d})=>{
     document.getElementById('avgq').textContent=(qc>0)?'~'+Math.round(sav/qc).toLocaleString()+'t':'—';
     const pct=Math.min(100,Math.round(sav/2000));
     document.getElementById('ibarFill').style.width=pct+'%';
-    document.getElementById('ibarLbl').textContent=sav
-      ?'~'+Math.round(sav/1000)+'k tokens saved across '+qc+' quer'+(qc===1?'y':'ies')
-      :'No queries yet — ask Claude about your code';
+    document.getElementById('ibarLbl').textContent=
+      qc===0?'No queries yet — ask Claude about your code'
+      :sav?'~'+Math.round(sav/1000)+'k tokens saved across '+qc+' quer'+(qc===1?'y':'ies')
+      :qc+' quer'+(qc===1?'y':'ies')+' — no matches in graph';
   }
 
   if(d.type==='indexing'){

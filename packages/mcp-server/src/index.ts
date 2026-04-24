@@ -28,12 +28,12 @@ server.tool(
     agent_id: z.string().optional().describe('Calling agent ID for domain filtering'),
   },
   async ({ symbol, file_path, agent_id }) => {
-    signalActivity('get_dependency_chain');
     const candidates = db.searchNodes(symbol, 5);
     const filtered = file_path
       ? candidates.filter(n => n.file_path.includes(file_path))
       : candidates;
     if (filtered.length === 0) {
+      signalActivity('get_dependency_chain', 0);
       return { content: [{ type: 'text', text: `No nodes found for symbol "${symbol}"` }] };
     }
     const start = filtered[0];
@@ -45,7 +45,7 @@ server.tool(
 
     const budget = estimateBudget(deps.length);
     const result = deps.slice(0, budget).map(n => formatNode(n!));
-    trackQuery(agent_id, start.id, result.map(r => r.id));
+    signalActivity('get_dependency_chain', result.length);
 
     return {
       content: [
@@ -75,7 +75,6 @@ server.tool(
     agent_id: z.string().optional(),
   },
   async ({ symbol, file_path, hops, agent_id }) => {
-    signalActivity('find_related_nodes');
     let startId: string | null = null;
     if (symbol) {
       const nodes = db.searchNodes(symbol, 3);
@@ -85,6 +84,7 @@ server.tool(
       startId = nodes.find(n => n.type === 'file')?.id ?? nodes[0]?.id ?? null;
     }
     if (!startId) {
+      signalActivity('find_related_nodes', 0);
       return { content: [{ type: 'text', text: 'No matching node found.' }] };
     }
     const neighbourIds = db.getNeighbourhood(startId, hops);
@@ -95,7 +95,7 @@ server.tool(
 
     const budget = estimateBudget(neighbours.length);
     const result = neighbours.slice(0, budget).map(n => formatNode(n!));
-    trackQuery(agent_id, startId, result.map(r => r.id));
+    signalActivity('find_related_nodes', result.length);
 
     return {
       content: [
@@ -117,20 +117,21 @@ server.tool(
     file_path: z.string().optional(),
     agent_id: z.string().optional(),
   },
-  async ({ symbol, file_path, agent_id }) => {
-    signalActivity('get_context_for_symbol');
+  async ({ symbol, file_path }) => {
     const candidates = db.searchNodes(symbol, 5);
     const node = file_path
       ? candidates.find(n => n.file_path.includes(file_path)) ?? candidates[0]
       : candidates[0];
     if (!node) {
+      signalActivity('get_context_for_symbol', 0);
       return { content: [{ type: 'text', text: `Symbol "${symbol}" not found in graph.` }] };
     }
     const callerEdges = db.getIncoming(node.id);
     const calleeEdges = db.getOutgoing(node.id);
     const callers = callerEdges.map(e => db.getNode(e.source_id)).filter(Boolean).map(n => formatNode(n!));
     const callees = calleeEdges.map(e => db.getNode(e.target_id)).filter(Boolean).map(n => formatNode(n!));
-    trackQuery(agent_id, node.id, [node.id, ...callers.map(c => c.id), ...callees.map(c => c.id)]);
+    const served = [node.id, ...callers.map(c => c.id), ...callees.map(c => c.id)];
+    signalActivity('get_context_for_symbol', served.length);
 
     return {
       content: [
@@ -159,11 +160,8 @@ server.tool(
     agent_id: z.string().optional(),
   },
   async ({ query, limit, agent_id }) => {
-    signalActivity('search_graph');
     const nodes = db.searchNodes(query, limit).filter(n => agentFilter(n, agent_id));
-    if (nodes.length > 0) {
-      trackQuery(agent_id, nodes[0].id, nodes.map(n => n.id));
-    }
+    signalActivity('search_graph', nodes.length);
     return {
       content: [
         {
@@ -181,7 +179,7 @@ server.tool(
   'Read a persistent memory value bound to this agent.',
   { agent_id: z.string(), key: z.string() },
   async ({ agent_id, key }) => {
-    signalActivity('get_agent_memory');
+    signalActivity('get_agent_memory', 0);
     const value = db.getAgentMemory(agent_id, key);
     return {
       content: [{ type: 'text', text: value ?? `(no memory for key "${key}")` }],
@@ -200,7 +198,7 @@ server.tool(
     node_id: z.string().optional(),
   },
   async ({ agent_id, key, value, node_id }) => {
-    signalActivity('set_agent_memory');
+    signalActivity('set_agent_memory', 0);
     db.setAgentMemory(agent_id, key, value, node_id ?? null);
     return { content: [{ type: 'text', text: `Memory saved: ${key}` }] };
   },
@@ -212,7 +210,7 @@ server.tool(
   'Get DeepGrep index stats: node/edge counts, last index time, efficiency metrics.',
   {},
   async () => {
-    signalActivity('get_stats');
+    signalActivity('get_stats', 0);
     const stats = db.getStats();
     const queryStats = db.getAgentMemory('__system', 'query_stats');
     const parsed = queryStats ? JSON.parse(queryStats) : { total: 0, token_savings: 0 };
@@ -236,9 +234,14 @@ server.tool(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function signalActivity(toolName: string): void {
+function signalActivity(toolName: string, served = 0): void {
   try {
-    writeFileSync(ACTIVITY_PATH, JSON.stringify({ tool: toolName, ts: Date.now() }));
+    const raw = db.getAgentMemory('__system', 'query_stats');
+    const stats = raw ? (JSON.parse(raw) as { total: number; token_savings: number }) : { total: 0, token_savings: 0 };
+    stats.total++;
+    stats.token_savings += served * 200;
+    db.setAgentMemory('__system', 'query_stats', JSON.stringify(stats), null);
+    writeFileSync(ACTIVITY_PATH, JSON.stringify({ tool: toolName, ts: Date.now(), served }));
   } catch {
     // Non-fatal — extension host may not be running
   }
@@ -277,13 +280,6 @@ function formatNode(n: {
   };
 }
 
-function trackQuery(agentId: string | undefined, startId: string, servedIds: string[]): void {
-  const raw = db.getAgentMemory('__system', 'query_stats');
-  const stats = raw ? JSON.parse(raw) : { total: 0, token_savings: 0 };
-  stats.total++;
-  stats.token_savings += servedIds.length * 200;
-  db.setAgentMemory('__system', 'query_stats', JSON.stringify(stats), startId);
-}
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 (async () => {

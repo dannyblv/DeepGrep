@@ -85,15 +85,12 @@ fn handle_request(
             let tool_name = req.params["name"].as_str().unwrap_or("");
             let args = &req.params["arguments"];
 
-            // Signal webview animator
-            let _ = std::fs::write(
-                activity_path,
-                format!("{{\"tool\":\"{}\",\"ts\":{}}}", tool_name, now_ms()),
-            );
-
-            let text = match tools::dispatch(db, tool_name, args, token_budget) {
-                Ok(t) => t,
+            let (text, served) = match tools::dispatch(db, tool_name, args, token_budget) {
+                Ok(pair) => pair,
                 Err(e) => {
+                    // Still signal activity on error so the webview animates and
+                    // the extension counts the attempt.
+                    write_activity(activity_path, tool_name, 0);
                     if is_notification {
                         return None;
                     }
@@ -103,6 +100,13 @@ fn handle_request(
                     ));
                 }
             };
+
+            // Signal webview animator AND prompt-impact tracker. The extension
+            // host reads `served` and updates `agent_memory`/`__system` with the
+            // cumulative query count + token-savings estimate.
+            write_activity(activity_path, tool_name, served);
+
+            let text = format!("## ⬡ DeepGrep V1 Result\n\n{}", text);
 
             Some(json!({
                 "content": [{"type": "text", "text": text}],
@@ -135,4 +139,46 @@ fn now_ms() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis()
+}
+
+fn write_activity(path: &str, tool: &str, served: usize) {
+    let payload = json!({ "tool": tool, "ts": now_ms() as u64, "served": served });
+    let _ = std::fs::write(path, payload.to_string());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Read;
+
+    #[test]
+    fn write_activity_includes_served_count() {
+        let tmp = std::env::temp_dir().join(format!("dg-activity-{}.json", now_ms()));
+        let path = tmp.to_string_lossy().to_string();
+        write_activity(&path, "search_graph", 7);
+
+        let mut contents = String::new();
+        std::fs::File::open(&path).unwrap().read_to_string(&mut contents).unwrap();
+        let parsed: Value = serde_json::from_str(&contents).unwrap();
+
+        assert_eq!(parsed["tool"], "search_graph");
+        assert_eq!(parsed["served"], 7);
+        assert!(parsed["ts"].as_u64().unwrap() > 0);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn write_activity_with_zero_served_still_emits_field() {
+        let tmp = std::env::temp_dir().join(format!("dg-activity-zero-{}.json", now_ms()));
+        let path = tmp.to_string_lossy().to_string();
+        write_activity(&path, "get_stats", 0);
+
+        let mut contents = String::new();
+        std::fs::File::open(&path).unwrap().read_to_string(&mut contents).unwrap();
+        let parsed: Value = serde_json::from_str(&contents).unwrap();
+
+        assert_eq!(parsed["served"], 0);
+        let _ = std::fs::remove_file(&path);
+    }
 }

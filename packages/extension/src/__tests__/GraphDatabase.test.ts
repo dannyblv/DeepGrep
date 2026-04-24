@@ -392,4 +392,110 @@ describe('GraphDatabase', () => {
       assert.equal(db.getMeta('k'), 'v2');
     });
   });
+
+  // ── Prompt-impact stats (backs the sidebar's Prompt Impact panel) ──────────
+
+  describe('incrementQueryStats', () => {
+    it('starts at zero when no stats row exists', () => {
+      assert.equal(db.getAgentMemory('__system', 'query_stats'), null);
+    });
+
+    it('increments total and adds served*200 token savings', () => {
+      const first = db.incrementQueryStats(5);
+      assert.deepEqual(first, { total: 1, token_savings: 1000 });
+
+      const second = db.incrementQueryStats(3);
+      assert.deepEqual(second, { total: 2, token_savings: 1600 });
+    });
+
+    it('counts zero-served queries but adds no token savings', () => {
+      db.incrementQueryStats(0); // e.g. empty search_graph result
+      db.incrementQueryStats(0);
+      const stats = JSON.parse(db.getAgentMemory('__system', 'query_stats')!);
+      assert.equal(stats.total, 2);
+      assert.equal(stats.token_savings, 0);
+    });
+
+    it('persists stats across calls via agent_memory', () => {
+      db.incrementQueryStats(4);
+      db.incrementQueryStats(6);
+      const raw = db.getAgentMemory('__system', 'query_stats');
+      assert.ok(raw, 'expected query_stats row to exist');
+      assert.deepEqual(JSON.parse(raw!), { total: 2, token_savings: 2000 });
+    });
+
+    it('clamps negative served values to zero', () => {
+      const stats = db.incrementQueryStats(-99);
+      assert.equal(stats.total, 1);
+      assert.equal(stats.token_savings, 0);
+    });
+  });
+
+  // ── getStats <-> incrementQueryStats integration ──────────────────────────
+  // Regression: the sidebar's "Prompt Impact" panel and the graph webview's
+  // "Prompt Impact" section both render from the same StatsPayload. They must
+  // see identical values, so getStats() must surface what incrementQueryStats
+  // persists, using the field names declared on the webview message type.
+
+  describe('getStats reflects persisted query stats', () => {
+    it('starts with zero query_count and token_savings_estimate', () => {
+      const s = db.getStats();
+      assert.equal(s.query_count, 0);
+      assert.equal(s.token_savings_estimate, 0);
+    });
+
+    it('reflects values written by incrementQueryStats', () => {
+      db.incrementQueryStats(5);
+      db.incrementQueryStats(3);
+      const s = db.getStats();
+      assert.equal(s.query_count, 2);
+      assert.equal(s.token_savings_estimate, 1600); // (5 + 3) * 200
+    });
+
+    it('uses field names that match the webview StatsPayload contract', () => {
+      // If these field names ever drift, the StatsPanel renders empty even
+      // when the sidebar shows data — exactly the bug this test guards.
+      db.incrementQueryStats(2);
+      const s = db.getStats() as unknown as Record<string, unknown>;
+      assert.ok('query_count' in s, 'getStats() must expose query_count');
+      assert.ok(
+        'token_savings_estimate' in s,
+        'getStats() must expose token_savings_estimate (matches StatsPayload)',
+      );
+      assert.ok(
+        !('estimated_token_savings' in s),
+        'getStats() must not expose estimated_token_savings (legacy name)',
+      );
+    });
+
+    it('a fresh getStats() call after each increment sees the latest values', () => {
+      // Both panels call getStats() on every refresh — verify it's not cached.
+      db.incrementQueryStats(1);
+      assert.equal(db.getStats().query_count, 1);
+      assert.equal(db.getStats().token_savings_estimate, 200);
+
+      db.incrementQueryStats(4);
+      assert.equal(db.getStats().query_count, 2);
+      assert.equal(db.getStats().token_savings_estimate, 1000);
+    });
+
+    it('two simulated panel reads return the same values from the same DB', () => {
+      // Simulates SidebarProvider.refresh() and GraphPanel.sendStats() each
+      // reading independently. The bug was that they used different sources
+      // and showed different values.
+      db.incrementQueryStats(7);
+      db.incrementQueryStats(3);
+
+      const sidebarRead = db.getStats();
+      const graphPanelRead = db.getStats();
+
+      assert.equal(sidebarRead.query_count, graphPanelRead.query_count);
+      assert.equal(
+        sidebarRead.token_savings_estimate,
+        graphPanelRead.token_savings_estimate,
+      );
+      assert.equal(sidebarRead.query_count, 2);
+      assert.equal(sidebarRead.token_savings_estimate, 2000);
+    });
+  });
 });

@@ -6,7 +6,7 @@ pub fn run(db: &Db) -> Result<String> {
     let stats = queries::get_stats(&db.conn)?;
 
     Ok(format!(
-        "## DeepGrep Index Stats\n\
+        "## ⬡ DeepGrep Index Stats\n\
          - **Nodes**: {}\n\
          - **Edges**: {}\n\
          - **Schema version**: {}\n\

@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::db::{queries, Db};
 
-pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<String> {
+pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<(String, usize)> {
     let symbol = args["symbol"].as_str().ok_or_else(|| anyhow::anyhow!("symbol required"))?;
     let file_hint = args["file_path"].as_str();
 
@@ -17,7 +17,7 @@ pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<String> {
 
     let start = match start {
         Some(n) => n.clone(),
-        None => return Ok(format!("Symbol \"{}\" not found in index.", symbol)),
+        None => return Ok((format!("Symbol \"{}\" not found in index.", symbol), 0)),
     };
 
     let start_id = start["id"].as_str().unwrap_or("");
@@ -47,5 +47,5 @@ pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<String> {
         out.push_str("_No dependencies found._\n");
     }
 
-    Ok(out)
+    Ok((out, shown + 1))
 }

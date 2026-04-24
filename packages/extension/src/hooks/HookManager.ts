@@ -8,8 +8,14 @@ const CLAUDE_MD_SECTION = `
 ## DeepGrep — Mandatory Search Protocol
 
 The codebase is indexed in \`.deepgrep/graph.db\`. Use \`mcp__deepgrep__*\` tools
-**instead of grep/find** for all code searches. Before calling any DeepGrep tool,
-output \`⬡ DeepGrep — <tool>\` in your response.
+**instead of grep/find** for all code searches.
+
+**Before calling any DeepGrep tool**, output this indicator block in your response:
+
+---
+**⬡ DeepGrep** — \`<tool>\` — *<flavor>*
+
+Flavor per tool: search_graph → *searching AST index…* · get_context_for_symbol → *tracing callers & callees…* · get_dependency_chain → *unwinding import chain…* · find_related_nodes → *expanding graph neighborhood…* · get_stats → *reading index metrics…*
 
 | Goal | Tool |
 |---|---|

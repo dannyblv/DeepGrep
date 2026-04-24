@@ -6,8 +6,6 @@ import type { WebviewToExtMsg, ExtToWebviewMsg, CyNode, CyEdge } from './message
 
 export class GraphPanel implements vscode.Disposable {
   private panel: vscode.WebviewPanel | null = null;
-  private queryCount = 0;
-  private tokenSavings = 0;
   private disposables: vscode.Disposable[] = [];
 
   constructor(
@@ -145,11 +143,6 @@ export class GraphPanel implements vscode.Disposable {
 
   highlightNodes(nodeIds: string[], color: 'ai' | 'error' | 'selected'): void {
     this.send({ type: 'highlight', nodeIds, color });
-    if (color === 'ai') {
-      this.queryCount++;
-      // Rough token savings: assume each served node saves ~200 tokens vs. full-file read
-      this.tokenSavings += nodeIds.length * 200;
-    }
   }
 
   notifyToolQuery(toolName: string): void {
@@ -161,15 +154,7 @@ export class GraphPanel implements vscode.Disposable {
   }
 
   sendStats(): void {
-    const dbStats = this.db.getStats();
-    this.send({
-      type: 'stats',
-      data: {
-        ...dbStats,
-        token_savings_estimate: this.tokenSavings,
-        query_count: this.queryCount,
-      },
-    });
+    this.send({ type: 'stats', data: this.db.getStats() });
   }
 
   private send(msg: ExtToWebviewMsg): void {

@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::db::{queries, Db};
 
-pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<String> {
+pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<(String, usize)> {
     let symbol = args["symbol"].as_str().ok_or_else(|| anyhow::anyhow!("symbol required"))?;
     let file_hint = args["file_path"].as_str();
 
@@ -18,12 +18,13 @@ pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<String> {
 
     let node = match node {
         Some(n) => n.clone(),
-        None => return Ok(format!("Symbol \"{}\" not found in index.", symbol)),
+        None => return Ok((format!("Symbol \"{}\" not found in index.", symbol), 0)),
     };
 
     let id = node["id"].as_str().unwrap_or("");
     let callers = queries::get_incoming(&db.conn, id)?;
     let callees = queries::get_outgoing(&db.conn, id)?;
+    let served = 1 + callers.len() + callees.len();
 
     // Check for stale memories bound to this node
     let stale_memories = stale_for_node(&db.conn, id);
@@ -74,7 +75,7 @@ pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<String> {
         }
     }
 
-    Ok(out)
+    Ok((out, served))
 }
 
 fn stale_for_node(conn: &rusqlite::Connection, node_id: &str) -> Vec<(String, String)> {

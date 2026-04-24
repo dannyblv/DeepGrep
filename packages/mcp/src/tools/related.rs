@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::db::{queries, Db};
 
-pub fn run(db: &Db, args: &Value) -> Result<String> {
+pub fn run(db: &Db, args: &Value) -> Result<(String, usize)> {
     let hops = args["hops"].as_u64().unwrap_or(2).clamp(1, 5) as usize;
 
     let start_id = if let Some(symbol) = args["symbol"].as_str() {
@@ -21,11 +21,12 @@ pub fn run(db: &Db, args: &Value) -> Result<String> {
 
     let start_id = match start_id {
         Some(id) => id,
-        None => return Ok("Provide `symbol` or `file_path`.".into()),
+        None => return Ok(("Provide `symbol` or `file_path`.".into(), 0)),
     };
 
     let related_ids = queries::get_neighbourhood(&db.conn, &start_id, hops)?;
     let total = related_ids.len();
+    let served = total.min(30) + 1;
 
     let mut out = format!("## Related nodes ({} within {} hop(s))\n\n", total, hops);
     for id in related_ids.iter().take(30) {
@@ -41,5 +42,5 @@ pub fn run(db: &Db, args: &Value) -> Result<String> {
     if total > 30 {
         out.push_str(&format!("… and {} more\n", total - 30));
     }
-    Ok(out)
+    Ok((out, served))
 }

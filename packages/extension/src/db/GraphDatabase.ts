@@ -36,7 +36,7 @@ export interface Stats {
   last_index_duration_ms: number | null;
   schema_version: string;
   query_count: number;
-  estimated_token_savings: number;
+  token_savings_estimate: number;
 }
 
 const SCHEMA_VERSION = '2';
@@ -361,6 +361,22 @@ export class GraphDatabase {
       .all(agentId);
   }
 
+  /**
+   * Atomically increment the cumulative MCP query stats used by the sidebar's
+   * "Prompt Impact" panel. Called from the activity-file watcher in the
+   * extension host because the Rust MCP server is read-only.
+   */
+  incrementQueryStats(served: number): { total: number; token_savings: number } {
+    const raw = this.getAgentMemory('__system', 'query_stats');
+    const stats = raw
+      ? (JSON.parse(raw) as { total: number; token_savings: number })
+      : { total: 0, token_savings: 0 };
+    stats.total += 1;
+    stats.token_savings += Math.max(0, served) * 200;
+    this.setAgentMemory('__system', 'query_stats', JSON.stringify(stats), null);
+    return stats;
+  }
+
   // ── Metadata / Stats ───────────────────────────────────────────────────────
 
   setMeta(key: string, value: string): void {
@@ -389,19 +405,19 @@ export class GraphDatabase {
     };
   }
 
-  private _readQueryStats(): { query_count: number; estimated_token_savings: number } {
+  private _readQueryStats(): { query_count: number; token_savings_estimate: number } {
     const row = this.db
       .prepare<[string, string], { value: string }>('SELECT value FROM agent_memory WHERE agent_id = ? AND key = ?')
       .get('__system', 'query_stats');
-    if (!row) return { query_count: 0, estimated_token_savings: 0 };
+    if (!row) return { query_count: 0, token_savings_estimate: 0 };
     try {
       const parsed = JSON.parse(row.value) as { total?: number; token_savings?: number };
       return {
         query_count: parsed.total ?? 0,
-        estimated_token_savings: parsed.token_savings ?? 0,
+        token_savings_estimate: parsed.token_savings ?? 0,
       };
     } catch {
-      return { query_count: 0, estimated_token_savings: 0 };
+      return { query_count: 0, token_savings_estimate: 0 };
     }
   }
 
