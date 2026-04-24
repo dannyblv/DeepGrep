@@ -1,0 +1,100 @@
+{
+  "name": "deepgrep-extension",
+  "displayName": "DeepGrep — Claude Code Context Engine",
+  "description": "Local AST graph indexer + MCP server that gives Claude Code deep structural context",
+  "version": "0.1.0",
+  "publisher": "deepgrep",
+  "private": true,
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "categories": ["Other", "Programming Languages"],
+  "keywords": ["claude", "ai", "mcp", "context", "ast", "graph"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "deepgrep.openGraph",
+        "title": "DeepGrep: Open Dependency Graph"
+      },
+      {
+        "command": "deepgrep.reindexWorkspace",
+        "title": "DeepGrep: Re-index Workspace"
+      },
+      {
+        "command": "deepgrep.showStats",
+        "title": "DeepGrep: Show Efficiency Stats"
+      },
+      {
+        "command": "deepgrep.clearMemory",
+        "title": "DeepGrep: Clear Agent Memory"
+      }
+    ],
+    "configuration": {
+      "title": "DeepGrep",
+      "properties": {
+        "deepgrep.tokenBudget": {
+          "type": "number",
+          "default": 4000,
+          "description": "Max tokens per MCP context response"
+        },
+        "deepgrep.indexOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Re-index files automatically on save"
+        },
+        "deepgrep.includedLanguages": {
+          "type": "array",
+          "default": ["typescript", "javascript", "python", "go", "rust"],
+          "description": "Languages to index"
+        },
+        "deepgrep.excludePatterns": {
+          "type": "array",
+          "default": ["**/node_modules/**", "**/dist/**", "**/.git/**", "**/*.test.*"],
+          "description": "Glob patterns to exclude from indexing"
+        },
+        "deepgrep.mcpServerPort": {
+          "type": "number",
+          "default": 7340,
+          "description": "Port for the HTTP-SSE MCP endpoint (stdio is always available)"
+        }
+      }
+    },
+    "menus": {
+      "editor/context": [
+        {
+          "command": "deepgrep.openGraph",
+          "group": "deepgrep"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "pnpm compile && pnpm build:webview",
+    "compile": "node esbuild.mjs",
+    "dev": "node esbuild.mjs --watch",
+    "build:webview": "pnpm --filter deepgrep-webview-ui build",
+    "package": "vsce package --no-dependencies",
+    "rebuild-native": "node ../../scripts/rebuild-native.mjs",
+    "clean": "rimraf dist out"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "better-sqlite3": "^12.9.0",
+    "web-tree-sitter": "^0.25.3",
+    "tree-sitter-wasms": "^0.1.12",
+    "express": "^4.21.2",
+    "chokidar": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.15.3",
+    "@types/vscode": "^1.99.0",
+    "@vscode/vsce": "^3.3.2",
+    "esbuild": "^0.25.3",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3"
+  }
+}

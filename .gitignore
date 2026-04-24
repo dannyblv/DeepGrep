@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+*.vsix
+
+# Tree-sitter WASM grammars (downloaded at build time via tree-sitter-wasms)
+packages/extension/grammars/
+
+# Native addons (rebuilt per Electron version)
+*.node
+build/Release/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Runtime data (.gitkeep preserved to track the directory)
+.deepgrep/*
+!.deepgrep/.gitkeep
+
+# Source maps
+*.js.map
+
+# MCP local discovery config
+.mcp.json
+
+# VS Code user-specific (launch.json is committed for dev setup)
+.vscode/settings.json
+
+# Logs
+*.log
+pnpm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
