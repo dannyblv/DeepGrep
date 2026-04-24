@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { GraphView } from './components/GraphView';
 import { StatsPanel } from './components/StatsPanel';
 import { NodeDetail } from './components/NodeDetail';
+import { GraphSummary } from './components/GraphSummary';
 import { postMessage, onMessage } from './vscode';
 import type { CyNode, CyEdge, StatsPayload, ExtToWebviewMsg } from './vscode';
 
@@ -69,7 +70,10 @@ export default function App() {
       {indexing && (
         <div className="progress-bar">
           <div className="progress-fill" style={{ width: `${indexing.progress}%` }} />
-          <span className="progress-label">{indexing.message}</span>
+          <span className="progress-label">
+            <span className="progress-pct">{indexing.progress}%</span>
+            {indexing.message}
+          </span>
         </div>
       )}
 
@@ -82,13 +86,19 @@ export default function App() {
               highlighted={highlighted}
               onNodeClick={(nodeId) => postMessage({ type: 'nodeClick', nodeId })}
             />
-            {detail && (
+            {detail ? (
               <NodeDetail
                 data={detail.node}
                 onClose={() => setDetail(null)}
                 onNavigate={(nodeId) => postMessage({ type: 'nodeClick', nodeId })}
               />
-            )}
+            ) : nodes.length > 0 ? (
+              <GraphSummary
+                nodes={nodes}
+                edges={edges}
+                onNodeClick={(nodeId) => postMessage({ type: 'nodeClick', nodeId })}
+              />
+            ) : null}
           </div>
         )}
         {tab === 'stats' && <StatsPanel stats={stats} />}

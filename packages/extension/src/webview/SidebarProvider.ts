@@ -162,6 +162,13 @@ function syncGraphBtn(){
 }
 
 function fmt(n){return n==null?'—':n.toLocaleString()}
+function fmtDur(ms){
+  if(ms==null)return'—';
+  if(ms<1000)return ms+'ms';
+  if(ms<60000)return(ms/1000).toFixed(1)+'s';
+  const m=Math.floor(ms/60000),s=Math.round((ms%60000)/1000);
+  return m+'m '+(s<10?'0':'')+s+'s';
+}
 function ago(ts){
   if(!ts)return'—';
   const d=Date.now()-ts;
@@ -177,7 +184,7 @@ window.addEventListener('message',({data:d})=>{
     document.getElementById('nc').textContent=fmt(s.node_count);
     document.getElementById('ec').textContent=fmt(s.edge_count);
     document.getElementById('li').textContent=ago(s.last_indexed);
-    document.getElementById('dur').textContent=s.last_index_duration_ms?s.last_index_duration_ms+'ms':'—';
+    document.getElementById('dur').textContent=fmtDur(s.last_index_duration_ms);
     document.getElementById('qc').textContent=fmt(s.query_count)||'—';
     document.getElementById('ts').textContent=s.token_savings_estimate?'~'+Math.round(s.token_savings_estimate/1000)+'k':'—';
     document.getElementById('sv').textContent=s.schema_version||'—';
@@ -193,8 +200,7 @@ window.addEventListener('message',({data:d})=>{
     if(d.indexing){
       pw.classList.add('on');
       document.getElementById('dot').className='dot spin';
-      document.getElementById('st').textContent=d.message||'Indexing…';
-      document.getElementById('pm').textContent=d.message||'';
+      document.getElementById('st').textContent='Indexing…';
     }else{
       pw.classList.remove('on');
     }
