@@ -4,8 +4,10 @@ import { existsSync, writeFileSync } from 'fs';
 import type { GraphDatabase } from '../db/GraphDatabase';
 
 /** Path to compiled Rust MCP server binary. */
-function mcpBinaryPath(workspaceRoot: string): string {
-  return resolve(workspaceRoot, 'target', 'release', 'deepgrep-mcp');
+function mcpBinaryPath(extensionPath: string): string {
+  const devBinary = resolve(extensionPath, '..', '..', 'target', 'release', 'deepgrep-mcp');
+  const pkgBinary = resolve(extensionPath, 'bin', 'deepgrep-mcp');
+  return existsSync(devBinary) ? devBinary : pkgBinary;
 }
 
 /** Fallback: legacy Node.js MCP server bundled with the extension. */
@@ -28,7 +30,7 @@ export class McpServerProvider implements vscode.Disposable {
   }
 
   private serverCommand(): { command: string; args: string[] } {
-    const rustBin = mcpBinaryPath(this.workspaceRoot);
+    const rustBin = mcpBinaryPath(this.context.extensionPath);
     if (existsSync(rustBin)) {
       return { command: rustBin, args: [] };
     }

@@ -3,14 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "setup": "pnpm install && node scripts/copy-grammars.mjs && node scripts/rebuild-native.mjs && pnpm build:rust && pnpm build",
-    "build": "pnpm -r build",
-    "build:rust": "cargo build --release",
-    "build:rust:debug": "cargo build",
-    "dev": "pnpm -r --parallel dev",
-    "test": "pnpm -r test",
-    "package": "pnpm --filter deepgrep-extension package",
-    "clean": "pnpm -r clean && rimraf node_modules && cargo clean"
+    "setup":           "pnpm install && node scripts/rebuild-native.mjs && pnpm build:rust && pnpm build",
+    "build":           "pnpm -r build",
+    "build:rust":      "cargo build --release",
+    "build:rust:debug":"cargo build",
+    "dev":             "pnpm -r --parallel dev",
+    "test":            "pnpm -r test",
+    "package":         "pnpm --filter deepgrep-extension package",
+    "clean":           "pnpm -r clean && rimraf node_modules && cargo clean"
   },
   "devDependencies": {
     "rimraf": "^6.0.1",

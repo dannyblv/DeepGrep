@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch DeepGrep Extension",
+      "name": "Launch Extension",
       "type": "extensionHost",
       "request": "launch",
       "args": [
@@ -10,7 +10,30 @@
       ],
       "outFiles": [
         "${workspaceFolder}/packages/extension/dist/**/*.js"
-      ]
+      ],
+      "sourceMaps": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/packages/extension/**",
+        "!**/node_modules/**"
+      ],
+      "preLaunchTask": "compile-extension"
+    },
+    {
+      "name": "Launch Extension (watch)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/extension"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/extension/dist/**/*.js"
+      ],
+      "sourceMaps": true,
+      "resolveSourceMapLocations": [
+        "${workspaceFolder}/packages/extension/**",
+        "!**/node_modules/**"
+      ],
+      "preLaunchTask": "watch-extension"
     }
   ]
 }

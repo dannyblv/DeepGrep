@@ -14,6 +14,7 @@ let graphPanel: GraphPanel | null = null;
 let sidebar: SidebarProvider | null = null;
 let statusBar: vscode.StatusBarItem | null = null;
 let out: vscode.OutputChannel | null = null;
+let extensionPath = '';
 
 function log(msg: string): void {
   const ts = new Date().toISOString().replace('T', ' ').slice(0, 23);
@@ -33,9 +34,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // ── Output channel ─────────────────────────────────────────────────────────
   out = vscode.window.createOutputChannel('DeepGrep');
   context.subscriptions.push(out);
+  extensionPath = context.extensionPath;
   log('DeepGrep activating…');
   log(`Workspace: ${workspaceRoot}`);
-  log(`Extension path: ${context.extensionPath}`);
+  log(`Extension path: ${extensionPath}`);
 
   // ── Database ───────────────────────────────────────────────────────────────
   const dbPath = resolve(workspaceRoot, '.deepgrep', 'graph.db');
@@ -189,7 +191,7 @@ async function reindexWorkspace(workspaceRoot: string): Promise<void> {
 
   log('─── Starting workspace re-index (Rust) ────────────────────');
 
-  if (!indexerExists(workspaceRoot)) {
+  if (!indexerExists(extensionPath)) {
     const msg = 'deepgrep-indexer binary not found. Run: cargo build --release';
     log(`ERROR: ${msg}`);
     setStatus('$(warning) DeepGrep: indexer not built');
@@ -205,7 +207,7 @@ async function reindexWorkspace(workspaceRoot: string): Promise<void> {
     sidebar?.setIndexing(true, 'Indexing workspace…');
     graphPanel?.sendProgress(10, 'Indexing workspace…');
 
-    const summary = await indexWorkspace(workspaceRoot, dbPath, (msg) => {
+    const summary = await indexWorkspace(workspaceRoot, dbPath, extensionPath, (msg) => {
       log(msg);
       const match = msg.match(/(\d+)\/(\d+)/);
       if (match) {
@@ -215,10 +217,6 @@ async function reindexWorkspace(workspaceRoot: string): Promise<void> {
         sidebar?.setIndexing(true, msg);
       }
     });
-
-    // Refresh the in-memory DB connection so reads reflect new data
-    db.close();
-    db = new GraphDatabase(dbPath);
 
     const nodeCount = db.getStats().node_count;
     const edgeCount = db.getStats().edge_count;
@@ -253,7 +251,7 @@ async function reindexFile(workspaceRoot: string, filePath: string): Promise<voi
     ? filePath.slice(workspaceRoot.length + 1)
     : filePath;
   try {
-    await rustReindexFile(filePath, workspaceRoot, dbPath);
+    await rustReindexFile(filePath, workspaceRoot, dbPath, extensionPath);
     graphPanel?.sendGraph();
     sidebar?.refresh();
     const nodeCount = db.getStats().node_count;

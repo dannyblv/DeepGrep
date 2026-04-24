@@ -9,23 +9,30 @@ export interface IndexSummary {
   duration_ms: number;
 }
 
-/** Path to the compiled deepgrep-indexer binary (cargo build --release). */
-export function getIndexerBinary(workspaceRoot: string): string {
-  return resolve(workspaceRoot, 'target', 'release', 'deepgrep-indexer');
+/**
+ * Resolves the deepgrep-indexer binary path.
+ * Dev layout:  <extensionPath>/../../target/release/deepgrep-indexer
+ * Packaged:    <extensionPath>/bin/deepgrep-indexer
+ */
+export function getIndexerBinary(extensionPath: string): string {
+  const devBinary = resolve(extensionPath, '..', '..', 'target', 'release', 'deepgrep-indexer');
+  const pkgBinary = resolve(extensionPath, 'bin', 'deepgrep-indexer');
+  return existsSync(devBinary) ? devBinary : pkgBinary;
 }
 
-export function indexerExists(workspaceRoot: string): boolean {
-  return existsSync(getIndexerBinary(workspaceRoot));
+export function indexerExists(extensionPath: string): boolean {
+  return existsSync(getIndexerBinary(extensionPath));
 }
 
 /** Run `deepgrep-indexer index --workspace <ws> --db <db>` */
 export function indexWorkspace(
   workspaceRoot: string,
   dbPath: string,
+  extensionPath: string,
   onProgress?: (msg: string) => void,
 ): Promise<IndexSummary> {
   return run(
-    workspaceRoot,
+    extensionPath,
     ['index', '--workspace', workspaceRoot, '--db', dbPath],
     onProgress,
   );
@@ -36,17 +43,18 @@ export function reindexFile(
   filePath: string,
   workspaceRoot: string,
   dbPath: string,
+  extensionPath: string,
 ): Promise<IndexSummary> {
-  return run(workspaceRoot, ['reindex', filePath, '--workspace', workspaceRoot, '--db', dbPath]);
+  return run(extensionPath, ['reindex', filePath, '--workspace', workspaceRoot, '--db', dbPath]);
 }
 
 function run(
-  workspaceRoot: string,
+  extensionPath: string,
   args: string[],
   onProgress?: (msg: string) => void,
 ): Promise<IndexSummary> {
   return new Promise((resolve_cb, reject) => {
-    const binary = getIndexerBinary(workspaceRoot);
+    const binary = getIndexerBinary(extensionPath);
     const proc = spawn(binary, args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
     let stdout = '';
