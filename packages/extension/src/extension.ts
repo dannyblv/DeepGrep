@@ -229,6 +229,7 @@ async function reindexWorkspace(
     log('Phase 1/3: parsing files…');
     const allNodes: import('./indexer/TreeSitterIndexer').IndexResult['nodes'] = [];
     const allEdges: import('./indexer/TreeSitterIndexer').IndexResult['edges'] = [];
+    const allReExports: import('./indexer/TreeSitterIndexer').ReExport[] = [];
     let skippedLarge = 0;
     let wasmDied = false;
     const BATCH = 50; // files per event-loop tick
@@ -248,12 +249,13 @@ async function reindexWorkspace(
         result = indexer.indexFile(filePath, workspaceRoot);
       } catch (fileErr) {
         log(`WARN: skipped ${filePath.replace(workspaceRoot, '')} — ${fileErr}`);
-        result = { nodes: [], edges: [] };
+        result = { nodes: [], edges: [], reExports: [] };
       }
 
       if (result.nodes.length === 0 && !indexer.crashed) skippedLarge++;
       allNodes.push(...result.nodes);
       allEdges.push(...result.edges);
+      allReExports.push(...result.reExports);
 
       // Update UI every BATCH files and yield to event loop
       if ((i + 1) % BATCH === 0 || i === files.length - 1) {
@@ -271,6 +273,107 @@ async function reindexWorkspace(
     }
 
     if (skippedLarge > 0) log(`WARN: skipped ${skippedLarge} oversized/empty files`);
+
+    // ── Phase 1.5: resolve cross-file call edges ───────────────────────────────
+    // Call edges targeting phantom `:0` line nodes (generated when the callee's
+    // line number isn't known at parse time) are resolved here, in-memory,
+    // before writing to the DB — so upsertEdges' FK check passes.
+    //
+    // The lookup strips file extensions so that `src/hooks/useProfile`
+    // (from @/ alias resolution) matches `src/hooks/useProfile.tsx`.
+    const stripExt = (fp: string) =>
+      fp.replace(/\.(tsx?|jsx?|py|go|rs|java|c|cpp|h|hpp)$/, '');
+    const symbolLookup = new Map<string, string>(); // "strippedPath:type:name" → id
+    for (const n of allNodes) {
+      const key = `${stripExt(n.file_path)}:${n.type}:${n.name}`;
+      if (!symbolLookup.has(key)) symbolLookup.set(key, n.id);
+    }
+    // Re-export map: barrel file (stripped) + exported name → [source base (stripped), source name]
+    // Index files are also keyed by their parent dir (e.g. 'src/store/hooks/index' → 'src/store/hooks')
+    // so that `import X from '@/store/hooks'` resolves to `src/store/hooks/index.ts`.
+    const reExportMap = new Map<string, [string, string]>();
+    for (const re of allReExports) {
+      const strippedBarrel = stripExt(re.barrelFile);
+      const entry: [string, string] = [stripExt(re.resolvedSourceBase), re.sourceName];
+      reExportMap.set(`${strippedBarrel}:${re.exportedName}`, entry);
+      if (strippedBarrel.endsWith('/index')) {
+        reExportMap.set(`${strippedBarrel.slice(0, -6)}:${re.exportedName}`, entry);
+      }
+    }
+    log(`Phase 1.5: ${allReExports.length} re-exports, reExportMap size ${reExportMap.size}`);
+
+    const phantomEdges = allEdges.filter(e => e.target_id.endsWith(':0'));
+    log(`Phase 1.5: ${phantomEdges.length} phantom edges, symbolLookup size ${symbolLookup.size}`);
+    const useThemePhantomsBefore = allEdges.filter(
+      e => e.type === 'calls' && e.target_id.endsWith(':function:useTheme:0'),
+    ).length;
+    log(`Phase 1.5 diagnostic: ${useThemePhantomsBefore} 'calls' phantom edges target useTheme BEFORE resolution`);
+    let resolvedEdges = 0;
+    for (const e of allEdges) {
+      if (!e.target_id.endsWith(':0')) continue;
+      // Parse id segments from the right: filePath:type:name:0
+      const i3 = e.target_id.lastIndexOf(':');               // ':0'
+      const i2 = e.target_id.lastIndexOf(':', i3 - 1);      // ':name'
+      const i1 = e.target_id.lastIndexOf(':', i2 - 1);      // ':type'
+      if (i1 < 0) continue;
+      const type = e.target_id.slice(i1 + 1, i2);
+      if (type !== 'function' && type !== 'class') continue;
+      const phantomFile = e.target_id.slice(0, i1);
+      const name = e.target_id.slice(i2 + 1, i3);
+      const tryLookup = (fp: string): string | undefined =>
+        symbolLookup.get(`${fp}:${type}:${name}`) ??
+        symbolLookup.get(`${stripExt(fp)}:${type}:${name}`);
+
+      let resolved = tryLookup(phantomFile);
+      if (!resolved) {
+        // Retry with alternate @/ alias: some projects map @/ → root, others @/ → src/
+        const alt = phantomFile.startsWith('src/') ? phantomFile.slice(4) : `src/${phantomFile}`;
+        resolved = tryLookup(alt);
+      }
+      if (!resolved) {
+        const barrelEntry = reExportMap.get(`${stripExt(phantomFile)}:${name}`);
+        if (barrelEntry) {
+          const [sourceBase, sourceName] = barrelEntry;
+          resolved = symbolLookup.get(`${sourceBase}:${type}:${sourceName}`);
+        }
+      }
+      if (resolved) { e.target_id = resolved; resolvedEdges++; }
+    }
+    log(`Phase 1.5: resolved ${resolvedEdges}/${phantomEdges.length} cross-file call edges`);
+
+    // ── Diagnostic: trace useTheme call edges and count source-missing drops ────────────────────
+    {
+      const nodeIdSet = new Set(allNodes.map(n => n.id));
+      let missingSource = 0;
+      for (const e of allEdges) {
+        if (e.target_id.endsWith(':0')) continue;
+        if (!nodeIdSet.has(e.source_id)) missingSource++;
+      }
+      log(`Phase 1.5 diagnostic: ${missingSource} resolved edges dropped (source not in nodes)`);
+
+      const useThemeCallsAfter = allEdges.filter(
+        e => e.type === 'calls' && !e.target_id.endsWith(':0') && e.target_id.includes(':function:useTheme:'),
+      );
+      const useThemeStillPhantom = allEdges.filter(
+        e => e.type === 'calls' && e.target_id.endsWith(':function:useTheme:0'),
+      ).length;
+
+      if (useThemeCallsAfter.length > 0) {
+        log(`Phase 1.5 diagnostic: ${useThemeCallsAfter.length} resolved 'calls' edges target useTheme`);
+        for (const e of useThemeCallsAfter.slice(0, 5)) {
+          log(`  caller source="${e.source_id}" exists=${nodeIdSet.has(e.source_id)}`);
+        }
+      } else if (useThemeStillPhantom > 0) {
+        log(`Phase 1.5 diagnostic: ${useThemeStillPhantom} useTheme phantom edges UNRESOLVED (lookup failed)`);
+        const sample = allEdges.find(e => e.type === 'calls' && e.target_id.endsWith(':function:useTheme:0'));
+        if (sample) log(`  sample phantom: source="${sample.source_id}" target="${sample.target_id}"`);
+      } else if (useThemePhantomsBefore === 0) {
+        log(`Phase 1.5 diagnostic: NO useTheme phantom edges were created (callerId=null or import not tracked)`);
+        // Show a sample call_expression caller to check if ANY call edges exist at all
+        const sampleCallEdge = allEdges.find(e => e.type === 'calls');
+        if (sampleCallEdge) log(`  sample 'calls' edge: source="${sampleCallEdge.source_id}" target="${sampleCallEdge.target_id}"`);
+      }
+    }
 
     // ── Phase 2: atomic DB write — clear old data, insert all nodes + edges in two transactions
     log(`Phase 2/3: writing ${allNodes.length} nodes + ${allEdges.length} edges…`);
@@ -295,6 +398,17 @@ async function reindexWorkspace(
     const nodeCount = db.getStats().node_count;
     const edgeCount = db.getStats().edge_count;
     log(`✓ Done: ${files.length} files · ${nodeCount} nodes · ${edgeCount} edges · ${duration}ms`);
+
+    // ── DB verification: check what searchNodes("useTheme") finds and its callers ────────────
+    {
+      const hits = db.searchNodes('useTheme', 5);
+      log(`DB verify: searchNodes("useTheme") → ${hits.length} nodes:`);
+      for (const n of hits) {
+        const incoming = db.getIncoming(n.id);
+        const calls = incoming.filter(e => e.type === 'calls');
+        log(`  id="${n.id}" type=${n.type} incoming=${incoming.length} calls=${calls.length}`);
+      }
+    }
 
     setStatus(
       `$(database) DeepGrep: ${nodeCount.toLocaleString()} nodes`,
