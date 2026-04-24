@@ -57,13 +57,41 @@ interface Props {
   edges: CyEdge[];
   highlighted: { ids: string[]; color: 'ai' | 'error' | 'selected' } | null;
   onNodeClick: (nodeId: string) => void;
+  searchFocusId?: string | null;
+  onBgTap?: () => void;
 }
 
-export function GraphView({ nodes, edges, highlighted, onNodeClick }: Props) {
+export function GraphView({ nodes, edges, highlighted, onNodeClick, searchFocusId, onBgTap }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Cytoscape.Core | null>(null);
   const highlightedRef = useRef(highlighted);
+  const searchFocusIdRef = useRef(searchFocusId);
   highlightedRef.current = highlighted;
+  searchFocusIdRef.current = searchFocusId;
+
+  // Applies the hover-focus visual state for a specific node (same as mouseover).
+  // Call with null to restore the previous state (highlighted or clean).
+  function applyFocus(cy: Cytoscape.Core, nodeId: string) {
+    const node = cy.getElementById(nodeId) as Cytoscape.NodeSingular;
+    if (!node.length) return;
+    const connectedEdges = node.connectedEdges();
+    const neighbors = connectedEdges.connectedNodes().not(node);
+    cy.elements().removeClass('hover-focus hover-edge hover-neighbor').addClass('dimmed');
+    node.removeClass('dimmed').addClass('hover-focus');
+    connectedEdges.removeClass('dimmed').addClass('hover-edge');
+    neighbors.removeClass('dimmed').addClass('hover-neighbor');
+  }
+
+  function clearFocus(cy: Cytoscape.Core) {
+    cy.elements().removeClass('dimmed hover-focus hover-edge hover-neighbor');
+    // Re-apply external highlight if any
+    const h = highlightedRef.current;
+    if (h?.ids.length) {
+      const idSet = new Set(h.ids);
+      cy.nodes().forEach(n => { if (!idSet.has(n.id())) n.addClass('dimmed'); });
+      cy.edges().forEach(e => { e.addClass('dimmed'); });
+    }
+  }
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -90,11 +118,10 @@ export function GraphView({ nodes, edges, highlighted, onNodeClick }: Props) {
         {
           selector: 'node',
           style: {
-            'background-color': (el) => NODE_COLOR[el.data('type')] ?? '#888',
-            shape: (el) => (NODE_SHAPE[el.data('type')] ?? 'ellipse') as Cytoscape.Css.PropertyValue<Cytoscape.Css.Node, 'shape'>,
-            width:  (el) => NODE_SIZE[el.data('type')] ?? 24,
-            height: (el) => NODE_SIZE[el.data('type')] ?? 24,
-            // Label
+            'background-color': (el: Cytoscape.NodeSingular) => NODE_COLOR[el.data('type')] ?? '#888',
+            shape: (el: Cytoscape.NodeSingular) => NODE_SHAPE[el.data('type')] ?? 'ellipse',
+            width:  (el: Cytoscape.NodeSingular) => NODE_SIZE[el.data('type')] ?? 24,
+            height: (el: Cytoscape.NodeSingular) => NODE_SIZE[el.data('type')] ?? 24,
             label: 'data(label)',
             'font-size': 11,
             color: '#e2e8f0',
@@ -102,23 +129,20 @@ export function GraphView({ nodes, edges, highlighted, onNodeClick }: Props) {
             'text-halign': 'center',
             'text-margin-y': 6,
             'text-max-width': '110px',
-            'text-overflow-wrap': 'anywhere' as Cytoscape.Css.PropertyValue<Cytoscape.Css.Node, 'text-overflow-wrap'>,
-            // Pill background so label is always legible over other nodes
+            'text-overflow-wrap': 'anywhere',
             'text-background-color': '#12121a',
             'text-background-opacity': 0.78,
             'text-background-padding': '2px',
-            'text-background-shape': 'roundrectangle' as Cytoscape.Css.PropertyValue<Cytoscape.Css.Node, 'text-background-shape'>,
-            // Subtle border matching fill
+            'text-background-shape': 'roundrectangle',
             'border-width': 2,
-            'border-color': (el) => NODE_COLOR[el.data('type')] ?? '#888',
+            'border-color': (el: Cytoscape.NodeSingular) => NODE_COLOR[el.data('type')] ?? '#888',
             'border-opacity': 0.35,
             'z-index': 1,
-          } as Cytoscape.Css.Node,
+          } as unknown as Cytoscape.Css.Node,
         },
-        // File nodes get bolder label
         {
           selector: 'node[type="file"]',
-          style: { 'font-size': 12, 'font-weight': '600' } as Cytoscape.Css.Node,
+          style: { 'font-size': 12, 'font-weight': '600' } as unknown as Cytoscape.Css.Node,
         },
 
         // ── Edges ─────────────────────────────────────────────────────────
@@ -127,14 +151,14 @@ export function GraphView({ nodes, edges, highlighted, onNodeClick }: Props) {
           style: {
             'curve-style': 'bezier',
             width: 1.8,
-            'line-color':          (el) => EDGE_STYLE[el.data('type')]?.color ?? '#666',
-            'target-arrow-color':  (el) => EDGE_STYLE[el.data('type')]?.color ?? '#666',
+            'line-color':          (el: Cytoscape.EdgeSingular) => EDGE_STYLE[el.data('type')]?.color ?? '#666',
+            'target-arrow-color':  (el: Cytoscape.EdgeSingular) => EDGE_STYLE[el.data('type')]?.color ?? '#666',
             'target-arrow-shape':  'triangle',
             'arrow-scale': 1.5,
-            'line-style': (el) => (EDGE_STYLE[el.data('type')]?.dash ?? 'solid') as Cytoscape.Css.PropertyValue<Cytoscape.Css.Edge, 'line-style'>,
+            'line-style': (el: Cytoscape.EdgeSingular) => EDGE_STYLE[el.data('type')]?.dash ?? 'solid',
             opacity: 0.65,
             'z-index': 0,
-          } as Cytoscape.Css.Edge,
+          } as unknown as Cytoscape.Css.Edge,
         },
 
         // ── Hover ──────────────────────────────────────────────────────────
@@ -153,16 +177,15 @@ export function GraphView({ nodes, edges, highlighted, onNodeClick }: Props) {
             width: 2.8,
             opacity: 1,
             'z-index': 15,
-            // Show edge type as inline label on hover
             label: 'data(type)',
             'font-size': 9,
             color: '#e2e8f0',
             'text-background-color': '#12121a',
             'text-background-opacity': 0.85,
             'text-background-padding': '2px',
-            'text-background-shape': 'roundrectangle' as Cytoscape.Css.PropertyValue<Cytoscape.Css.Edge, 'text-background-shape'>,
+            'text-background-shape': 'roundrectangle',
             'text-rotation': 'autorotate',
-          } as Cytoscape.Css.Edge,
+          } as unknown as Cytoscape.Css.Edge,
         },
         {
           selector: 'node.hover-neighbor',
@@ -205,16 +228,12 @@ export function GraphView({ nodes, edges, highlighted, onNodeClick }: Props) {
         animationEasing: 'ease-out',
         randomize: true,
         quality: 'proof',
-        // Primary spacing levers
         nodeRepulsion: 14000,
         idealEdgeLength: 160,
-        // Spring + gravity
         edgeElasticity: 0.45,
         gravity: 0.2,
         gravityRange: 3.8,
-        // More iterations → better separation
         numIter: 2500,
-        // Disconnected clusters get tiled with padding
         tile: true,
         tilingPaddingVertical: 40,
         tilingPaddingHorizontal: 40,
@@ -231,7 +250,6 @@ export function GraphView({ nodes, edges, highlighted, onNodeClick }: Props) {
       const node = evt.target as Cytoscape.NodeSingular;
       const connectedEdges = node.connectedEdges();
       const neighbors = connectedEdges.connectedNodes().not(node);
-      // Dim everything else
       cy.elements().addClass('dimmed');
       node.removeClass('dimmed').addClass('hover-focus');
       connectedEdges.removeClass('dimmed').addClass('hover-edge');
@@ -240,24 +258,50 @@ export function GraphView({ nodes, edges, highlighted, onNodeClick }: Props) {
 
     cy.on('mouseout', 'node', () => {
       cy.elements().removeClass('dimmed hover-focus hover-edge hover-neighbor');
-      // Re-apply any active highlight state
-      const h = highlightedRef.current;
-      if (h?.ids.length) {
-        const idSet = new Set(h.ids);
-        cy.nodes().forEach(n => {
-          if (!idSet.has(n.id())) n.addClass('dimmed');
-        });
-        cy.edges().forEach(e => e.addClass('dimmed'));
+      // Re-apply sticky search focus if active, otherwise restore external highlight
+      const fid = searchFocusIdRef.current;
+      if (fid) {
+        applyFocus(cy, fid);
+      } else {
+        const h = highlightedRef.current;
+        if (h?.ids.length) {
+          const idSet = new Set(h.ids);
+          cy.nodes().forEach(n => { if (!idSet.has(n.id())) n.addClass('dimmed'); });
+          cy.edges().forEach(e => { e.addClass('dimmed'); });
+        }
       }
     });
 
     cy.on('tap', 'node', (evt) => onNodeClick(evt.target.id()));
 
+    // Background tap clears sticky search focus
+    cy.on('tap', (evt) => {
+      if (evt.target === cy) onBgTap?.();
+    });
+
     cyRef.current = cy;
     return () => { cy.destroy(); cyRef.current = null; };
   }, [nodes, edges]);
 
-  // Apply/clear highlights without full re-render
+  // Apply/clear sticky search focus without full re-render
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    if (!searchFocusId) {
+      clearFocus(cy);
+      return;
+    }
+    applyFocus(cy, searchFocusId);
+    const node = cy.getElementById(searchFocusId);
+    if (node.length) {
+      cy.animate(
+        { fit: { eles: node, padding: 120 } },
+        { duration: 450, easing: 'ease-out-quad' as Cytoscape.Css.TransitionTimingFunction },
+      );
+    }
+  }, [searchFocusId]);
+
+  // Apply/clear external highlights without full re-render
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;

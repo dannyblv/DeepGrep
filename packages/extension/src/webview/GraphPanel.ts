@@ -9,6 +9,7 @@ export class GraphPanel implements vscode.Disposable {
   private queryCount = 0;
   private tokenSavings = 0;
   private disposables: vscode.Disposable[] = [];
+  private pendingOnboarding = false;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -53,6 +54,10 @@ export class GraphPanel implements vscode.Disposable {
       case 'ready':
         this.sendGraph();
         this.sendStats();
+        if (this.pendingOnboarding) {
+          this.pendingOnboarding = false;
+          this.send({ type: 'showOnboarding' });
+        }
         break;
       case 'requestStats':
         this.sendStats();
@@ -81,14 +86,30 @@ export class GraphPanel implements vscode.Disposable {
         });
         // Open the file at the right line
         vscode.workspace
-          .openTextDocument(node.file_path)
+          .openTextDocument(vscode.Uri.file(this.resolveFilePath(node.file_path)))
           .then(doc =>
             vscode.window.showTextDocument(doc, {
               selection: new vscode.Range(node.start_line, 0, node.start_line, 0),
               viewColumn: vscode.ViewColumn.One,
+              preserveFocus: false,
             }),
           )
           .then(undefined, () => undefined);
+        break;
+      }
+      case 'openFile': {
+        const n = this.db.getNode(msg.nodeId);
+        if (!n) break;
+        vscode.workspace
+          .openTextDocument(vscode.Uri.file(this.resolveFilePath(n.file_path)))
+          .then(
+            doc => vscode.window.showTextDocument(doc, {
+              selection: new vscode.Range(n.start_line, 0, n.start_line, 0),
+              viewColumn: vscode.ViewColumn.One,
+              preserveFocus: false,
+            }),
+            err => vscode.window.showErrorMessage(`DeepGrep: cannot open file — ${err}`),
+          );
         break;
       }
       case 'requestReindex':
@@ -123,6 +144,18 @@ export class GraphPanel implements vscode.Disposable {
     this.send({ type: 'toolQuery', toolName });
   }
 
+  showOnboarding(): void {
+    const panelAlreadyOpen = !!this.panel;
+    this.show();
+    if (panelAlreadyOpen) {
+      // Panel was already alive — send immediately (webview is running)
+      this.send({ type: 'showOnboarding' });
+    } else {
+      // Freshly created panel: wait for the 'ready' ping from the webview
+      this.pendingOnboarding = true;
+    }
+  }
+
   sendProgress(progress: number, message: string): void {
     this.send({ type: 'indexing', progress, message });
   }
@@ -141,6 +174,14 @@ export class GraphPanel implements vscode.Disposable {
 
   private send(msg: ExtToWebviewMsg): void {
     this.panel?.webview.postMessage(msg);
+  }
+
+  // DB stores paths workspace-relative (e.g. /tests/foo.ts). Resolve to absolute.
+  private resolveFilePath(filePath: string): string {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!root || filePath.startsWith(root)) return filePath;
+    const rel = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+    return resolve(root, rel);
   }
 
   private toCyNode(n: GraphNode): CyNode {

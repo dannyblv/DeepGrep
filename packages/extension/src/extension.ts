@@ -120,6 +120,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       vscode.commands.executeCommand('workbench.view.extension.deepgrep');
     }),
 
+    vscode.commands.registerCommand('deepgrep.showOnboarding', () => {
+      graphPanel?.showOnboarding();
+    }),
+
     vscode.commands.registerCommand('deepgrep.clearMemory', async () => {
       const confirm = await vscode.window.showWarningMessage(
         'Clear all DeepGrep agent memory? This cannot be undone.',
