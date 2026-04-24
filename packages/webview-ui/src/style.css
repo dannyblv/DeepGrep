@@ -61,6 +61,18 @@ nav button:hover { color: var(--text); }
   align-items: center; justify-content: center; gap: 8px; color: var(--text-dim);
 }
 
+/* Edge-type legend */
+.graph-legend {
+  position: absolute; bottom: 36px; left: 8px;
+  display: flex; flex-wrap: wrap; gap: 6px 12px;
+  background: rgba(18, 18, 26, 0.88); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px;
+  font-size: 10px; color: var(--text-dim);
+  pointer-events: none; max-width: 340px;
+}
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-line { flex-shrink: 0; overflow: visible; }
+
 /* Node detail panel */
 .node-detail {
   width: 280px; border-left: 1px solid var(--border); background: var(--surface);

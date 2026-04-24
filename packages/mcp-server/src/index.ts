@@ -2,7 +2,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import Database from 'better-sqlite3';
 import { resolve } from 'path';
 import { existsSync } from 'fs';
 import { GraphDatabase } from './db.js';
@@ -157,6 +156,9 @@ server.tool(
   },
   async ({ query, limit, agent_id }) => {
     const nodes = db.searchNodes(query, limit).filter(n => agentFilter(n, agent_id));
+    if (nodes.length > 0) {
+      trackQuery(agent_id, nodes[0].id, nodes.map(n => n.id));
+    }
     return {
       content: [
         {
@@ -268,5 +270,7 @@ function trackQuery(agentId: string | undefined, startId: string, servedIds: str
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-const transport = new StdioServerTransport();
-await server.connect(transport);
+(async () => {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+})();

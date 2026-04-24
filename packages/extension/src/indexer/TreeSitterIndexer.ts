@@ -1,6 +1,6 @@
 import { Parser, Language } from 'web-tree-sitter';
 import type { Node } from 'web-tree-sitter';
-import { readFileSync } from 'fs';
+import { readFileSync, statSync } from 'fs';
 import { extname, basename, resolve } from 'path';
 import type { GraphNode, GraphEdge } from '../db/GraphDatabase';
 
@@ -25,9 +25,15 @@ const EXT_TO_LANG: Record<string, string> = {
   '.hpp': 'cpp',
 };
 
+// WASM heap is ~32 MB shared across all parsers; large files reliably OOM it.
+const MAX_FILE_BYTES = 500_000; // 500 KB
+
 export class TreeSitterIndexer {
   private parsers: Map<string, Parser> = new Map();
   private initialized = false;
+  private wasmCrashed = false;
+
+  get crashed(): boolean { return this.wasmCrashed; }
 
   async init(grammarsDir: string): Promise<void> {
     await Parser.init();
@@ -48,10 +54,18 @@ export class TreeSitterIndexer {
 
   indexFile(filePath: string, workspaceRoot: string): IndexResult {
     if (!this.initialized) throw new Error('TreeSitterIndexer not initialized');
+    if (this.wasmCrashed) return { nodes: [], edges: [] };
 
     const ext = extname(filePath).toLowerCase();
     const lang = EXT_TO_LANG[ext];
     if (!lang || !this.parsers.has(lang)) return { nodes: [], edges: [] };
+
+    try {
+      const fileSize = statSync(filePath).size;
+      if (fileSize > MAX_FILE_BYTES) return { nodes: [], edges: [] };
+    } catch {
+      return { nodes: [], edges: [] };
+    }
 
     let source: string;
     try {
@@ -61,7 +75,14 @@ export class TreeSitterIndexer {
     }
 
     const parser = this.parsers.get(lang)!;
-    const tree = parser.parse(source);
+    let tree: ReturnType<Parser['parse']>;
+    try {
+      tree = parser.parse(source);
+    } catch {
+      // WASM heap exhausted — parser is permanently dead after abort()
+      this.wasmCrashed = true;
+      return { nodes: [], edges: [] };
+    }
     if (!tree) return { nodes: [], edges: [] };
     const relPath = filePath.startsWith(workspaceRoot)
       ? filePath.slice(workspaceRoot.length + 1)

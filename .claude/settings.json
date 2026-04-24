@@ -6,7 +6,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/danny.braunstein/Desktop/Danny/DeepGrep/scripts/pre-tool-use.mjs"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pre-tool-use.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__deepgrep__",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deepgrep-indicator.sh"
           }
         ]
       }
@@ -17,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /Users/danny.braunstein/Desktop/Danny/DeepGrep/scripts/post-tool-use.mjs"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-use.sh"
           }
         ]
       }

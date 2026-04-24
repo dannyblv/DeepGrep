@@ -8,11 +8,41 @@
   "engines": {
     "vscode": "^1.99.0"
   },
-  "categories": ["Other", "Programming Languages"],
-  "keywords": ["claude", "ai", "mcp", "context", "ast", "graph"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "claude",
+    "ai",
+    "mcp",
+    "context",
+    "ast",
+    "graph"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "deepgrep",
+          "title": "DeepGrep",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "deepgrep": [
+        {
+          "type": "webview",
+          "id": "deepgrep.sidebar",
+          "name": "DeepGrep"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "deepgrep.openGraph",
@@ -29,6 +59,14 @@
       {
         "command": "deepgrep.clearMemory",
         "title": "DeepGrep: Clear Agent Memory"
+      },
+      {
+        "command": "deepgrep.focusSidebar",
+        "title": "DeepGrep: Show Sidebar"
+      },
+      {
+        "command": "deepgrep.showLogs",
+        "title": "DeepGrep: Show Logs"
       }
     ],
     "configuration": {
@@ -46,12 +84,23 @@
         },
         "deepgrep.includedLanguages": {
           "type": "array",
-          "default": ["typescript", "javascript", "python", "go", "rust"],
+          "default": [
+            "typescript",
+            "javascript",
+            "python",
+            "go",
+            "rust"
+          ],
           "description": "Languages to index"
         },
         "deepgrep.excludePatterns": {
           "type": "array",
-          "default": ["**/node_modules/**", "**/dist/**", "**/.git/**", "**/*.test.*"],
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/.git/**",
+            "**/*.test.*"
+          ],
           "description": "Glob patterns to exclude from indexing"
         },
         "deepgrep.mcpServerPort": {
@@ -65,7 +114,8 @@
       "editor/context": [
         {
           "command": "deepgrep.openGraph",
-          "group": "deepgrep"
+          "group": "deepgrep",
+          "when": "!deepgrep.isIndexing"
         }
       ]
     }
@@ -75,6 +125,9 @@
     "compile": "node esbuild.mjs",
     "dev": "node esbuild.mjs --watch",
     "build:webview": "pnpm --filter deepgrep-webview-ui build",
+    "test": "node scripts/run-tests.mjs",
+    "test:only": "mocha",
+    "test:watch": "mocha --watch",
     "package": "vsce package --no-dependencies",
     "rebuild-native": "node ../../scripts/rebuild-native.mjs",
     "clean": "rimraf dist out"
@@ -82,19 +135,22 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "better-sqlite3": "^12.9.0",
-    "web-tree-sitter": "^0.25.3",
-    "tree-sitter-wasms": "^0.1.12",
+    "chokidar": "^4.0.3",
     "express": "^4.21.2",
-    "chokidar": "^4.0.3"
+    "tree-sitter-wasms": "^0.1.12",
+    "web-tree-sitter": "^0.25.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
     "@types/express": "^5.0.1",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^22.15.3",
     "@types/vscode": "^1.99.0",
     "@vscode/vsce": "^3.3.2",
     "esbuild": "^0.25.3",
+    "mocha": "^11.7.5",
     "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   }
 }

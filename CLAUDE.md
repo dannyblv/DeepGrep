@@ -1,5 +1,17 @@
 # DeepGrep — Claude Code Environment
 
+## Search Protocol
+**Always prefer DeepGrep MCP tools over `grep`/`find`/`Bash` for codebase exploration.**
+
+| Instead of… | Use… |
+|---|---|
+| `grep -r "functionName"` | `mcp__deepgrep__search_graph` |
+| `grep -rn "import"` / tracing dependencies | `mcp__deepgrep__get_dependency_chain` |
+| "what calls this function?" | `mcp__deepgrep__get_context_for_symbol` |
+| "what files are related to X?" | `mcp__deepgrep__find_related_nodes` |
+
+Only fall back to grep/bash if the graph returns no results (DB may be empty before first index).
+
 ## Project Purpose
 DeepGrep is a VS Code extension that indexes your codebase into an AST-derived dependency graph (SQLite), exposes that graph to Claude Code via a local MCP server, and visualizes it in a Cytoscape.js webview. The goal: give Claude Code deep structural context at low token cost.
 

@@ -1,37 +1,109 @@
+# DeepGrep
 
-***
+A VS Code extension that gives Claude Code deep structural understanding of your codebase — at low token cost.
 
-**System Role:** You are an expert VS Code Extension Developer and AI Systems Architect. Your task is to build a complex, local-first context engine extension for VS Code designed to empower the Claude Code AI CLI. 
+It parses your code into an AST-derived dependency graph (SQLite), exposes that graph to Claude Code via a local MCP server, and visualizes it in a Cytoscape.js webview.
 
-**Project Overview:**
-The goal is to replicate and improve upon the semantic, graph-driven context capabilities seen in tools like `vexp.dev`. The extension will parse the codebase into a dependency graph, visualize it, and feed highly relevant, token-optimized context to Claude Code and its sub-agents using the Model Context Protocol (MCP).
+---
 
-**Core Technical Requirements & Architecture:**
+## How it works
 
-**1. AST Indexing & Semantic Graph (The Backend)**
-*   Implement a local parsing engine using Tree-sitter to traverse the workspace's Abstract Syntax Trees (AST).
-*   Store the extracted structural relationships (functions, classes, imports) in an embedded local SQLite database to create a directed dependency graph.
-*   Ensure the indexing runs asynchronously (e.g., via a Web Worker) so it doesn't block the VS Code extension host.
+1. **Indexing** — Tree-sitter parses your workspace into nodes (functions, classes, imports) and edges (calls, imports, extends). Stored locally in `.deepgrep/graph.db`.
+2. **MCP server** — A stdio server exposes graph query tools to Claude Code. Claude calls these instead of reading whole files.
+3. **Webview** — A Cytoscape.js panel shows the graph. Nodes light up when Claude queries them so you can see its "cognitive boundary."
+4. **Hooks** — A `PreToolUse` hook blocks dangerous edits (e.g. schema changes without a migration). A `PostToolUse` hook re-indexes any file Claude just edited.
 
-**2. MCP Server Implementation**
-*   Build the MCP server using the official `@modelcontextprotocol/sdk` for TypeScript.[1]
-*   Register the MCP server directly within VS Code using the `vscode.lm.registerMcpServerDefinitionProvider` API.[2]
-*   Expose tools to Claude Code using the required MCP tool name format: `mcp__{server_name}__{tool_name}` (e.g., `mcp__graph__get_dependency_chain`).[3]
-*   Implement Agent Identity Protocol (AIP) logic to inspect incoming `agent_id` metadata. This ensures that when specialized sub-agents query the graph, the server filters the returned nodes based on the agent's specific domain (e.g., UI vs. Database).[4]
+---
 
-**3. Interactive Webview Visualization**
-*   Create a rich visualization of the SQLite dependency graph using the VS Code Webview API.[5]
-*   Render the network using Cytoscape.js integrated with React to handle force-directed layouts for potentially thousands of nodes.[6, 7]
-*   Implement bi-directional message passing: clicking a node in the Webview should query the SQLite DB, and when the MCP server serves context to Claude, the Webview should highlight those specific nodes to show the user the AI's "cognitive boundaries."
+## Project layout
 
-**4. Terminal Interception & Shell Integration**
-*   Leverage VS Code's Terminal Shell Integration APIs, specifically listening to `window.onDidStartTerminalShellExecution` and parsing the `TerminalShellExecutionStartEvent` stream.[8]
-*   If Claude Code executes a command (like a test runner) that results in a stack trace, intercept this output, identify the failing functions, and auto-focus the Webview graph on the broken nodes.
+```
+packages/
+  extension/     VS Code extension host (TypeScript + esbuild)
+  webview-ui/    Cytoscape.js + React panel (Vite)
+  mcp-server/    Standalone MCP stdio server
+scripts/
+  pre-tool-use.mjs   Blocks dangerous edits
+  post-tool-use.mjs  Queues re-index after edits
+.claude/
+  settings.json  Hook wiring + permissions
+  agents/        Sub-agent domain definitions
+.deepgrep/
+  graph.db       SQLite graph (gitignored)
+```
 
-**5. Claude Code Lifecycle Hooks & Memory**
-*   Programmatically generate and manage Claude Code lifecycle hooks within `.claude/settings.json`. 
-*   Implement a `PreToolUse` hook script that intercepts `Edit` or `Write` commands. If the AI attempts a structurally dangerous edit, the script must exit with code `2` to deterministically block the action and feed a warning back to Claude.[9, 10]
-*   Implement a `PostToolUse` hook that triggers the Tree-sitter parser to instantly re-index modified files.[11]
-*   Manage persistent memory for sub-agents. Instead of relying purely on unstructured text, bind the agent's analytical conclusions to specific AST nodes, and ensure the extension maps these insights to the correct sub-agent memory directories (e.g., `.claude/agent-memory/<name>/` for project scope).[12]
+Key files:
+- [extension.ts](packages/extension/src/extension.ts) — activation, wires everything together
+- [TreeSitterIndexer.ts](packages/extension/src/indexer/TreeSitterIndexer.ts) — AST → SQLite
+- [GraphDatabase.ts](packages/extension/src/db/GraphDatabase.ts) — all SQLite queries
+- [index.ts](packages/mcp-server/src/index.ts) — MCP server entry
 
-**First Step:** Please begin by scaffolding the VS Code extension project structure, setting up the necessary Tree-sitter and SQLite dependencies, and drafting the `vscode.lm.registerMcpServerDefinitionProvider` registration.
+---
+
+## Getting started
+
+```bash
+pnpm install
+pnpm build
+```
+
+Then open `packages/extension` in VS Code and press **F5** to launch the Extension Development Host.
+
+Claude Code auto-discovers the MCP server via `.mcp.json`. Open the Command Palette → **DeepGrep: Open Graph** to see the visualization.
+
+---
+
+## MCP tools
+
+These are the tools Claude Code can call. Tool names follow the `mcp__{server}__{tool}` format.
+
+| Tool | What it does |
+|------|-------------|
+| `mcp__deepgrep__get_dependency_chain` | Full transitive dep chain for a symbol |
+| `mcp__deepgrep__find_related_nodes` | Nodes within N hops of a file/symbol |
+| `mcp__deepgrep__get_context_for_symbol` | Code snippet + callers + callees |
+| `mcp__deepgrep__search_graph` | Fuzzy name search across all nodes |
+| `mcp__deepgrep__get_agent_memory` | Read AST-bound memory for an agent |
+| `mcp__deepgrep__set_agent_memory` | Write AST-bound memory for an agent |
+| `mcp__deepgrep__get_stats` | Index freshness, node/edge counts, token savings |
+
+### Adding a new tool
+
+1. Create `packages/mcp-server/src/handlers/<name>.ts`
+2. Register it in [index.ts](packages/mcp-server/src/index.ts) via `server.tool(...)`
+3. Add it to the table above
+
+---
+
+## SQLite schema
+
+```sql
+nodes(id, type, name, file_path, start_line, end_line, language, code_snippet, metadata JSON)
+edges(source_id, target_id, type)   -- calls | imports | extends | uses | exports | re-exports
+agent_memory(id, agent_id, node_id, key, value, created_at)
+index_metadata(key, value)
+```
+
+All SQLite access goes through [GraphDatabase.ts](packages/extension/src/db/GraphDatabase.ts) — no inline SQL anywhere else.
+
+---
+
+## Sub-agents
+
+Each agent in `.claude/agents/` has a `domain_filter` (file globs it owns). The MCP server uses the `agent_id` arg on incoming tool calls to filter returned nodes to that domain and route memory reads/writes to `.claude/agent-memory/<agent_id>/`.
+
+---
+
+## Build reference
+
+```bash
+pnpm build              # build everything
+pnpm dev                # watch mode
+pnpm test               # run tests
+pnpm package            # produce .vsix
+
+# extension only
+cd packages/extension
+pnpm compile            # esbuild
+pnpm rebuild-native     # rebuild better-sqlite3 for Electron
+```

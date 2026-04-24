@@ -2,6 +2,25 @@ import * as vscode from 'vscode';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 
+const CLAUDE_MD_MARKER = 'mcp__deepgrep__search_graph';
+
+const CLAUDE_MD_SECTION = `
+## DeepGrep — Mandatory Search Protocol
+
+The codebase is indexed in \`.deepgrep/graph.db\`. Use \`mcp__deepgrep__*\` tools
+**instead of grep/find** for all code searches. Before calling any DeepGrep tool,
+output \`⬡ DeepGrep — <tool>\` in your response.
+
+| Goal | Tool |
+|---|---|
+| Find a function/class by name | \`mcp__deepgrep__search_graph\` |
+| What calls this function? | \`mcp__deepgrep__get_context_for_symbol\` |
+| Trace imports/dependencies | \`mcp__deepgrep__get_dependency_chain\` |
+| What is near this file/symbol? | \`mcp__deepgrep__find_related_nodes\` |
+
+Only fall back to \`grep\`/\`Bash\` if a graph query returns no results.
+`;
+
 interface ClaudeSettings {
   hooks?: {
     PreToolUse?: HookEntry[];
@@ -57,6 +76,20 @@ export class HookManager {
     });
 
     writeFileSync(this.settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+  }
+
+  ensureClaudeMd(): void {
+    const claudeMdPath = resolve(this.workspaceRoot, 'CLAUDE.md');
+
+    if (!existsSync(claudeMdPath)) {
+      writeFileSync(claudeMdPath, CLAUDE_MD_SECTION.trimStart(), 'utf8');
+      return;
+    }
+
+    const existing = readFileSync(claudeMdPath, 'utf8');
+    if (existing.includes(CLAUDE_MD_MARKER)) return;
+
+    writeFileSync(claudeMdPath, existing.trimEnd() + '\n' + CLAUDE_MD_SECTION, 'utf8');
   }
 
   ensureAgentMemoryDirs(agentIds: string[]): void {

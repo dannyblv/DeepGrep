@@ -35,9 +35,11 @@ export interface Stats {
   last_indexed: number | null;
   last_index_duration_ms: number | null;
   schema_version: string;
+  query_count: number;
+  estimated_token_savings: number;
 }
 
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS nodes (
@@ -86,6 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_agent ON agent_memory(agent_id, key);
 
 export class GraphDatabase {
   private db: Database.Database;
+  private ftsReady = false;
 
   constructor(dbPath: string) {
     const dir = dirname(dbPath);
@@ -95,19 +98,77 @@ export class GraphDatabase {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
+    this.db.pragma('cache_size = -32000'); // 32 MB page cache
     this.db.exec(SCHEMA_SQL);
+    this.ftsReady = this._tryInitFts();
     this.ensureSchemaVersion();
   }
 
-  private ensureSchemaVersion(): void {
-    const existing = this.db
-      .prepare<[], { value: string }>('SELECT value FROM index_metadata WHERE key = ?')
-      .get('schema_version');
-    if (!existing) {
-      this.db
-        .prepare('INSERT OR REPLACE INTO index_metadata (key, value) VALUES (?, ?)')
-        .run('schema_version', SCHEMA_VERSION);
+  private _tryInitFts(): boolean {
+    try {
+      this.db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
+          id        UNINDEXED,
+          name,
+          type      UNINDEXED,
+          file_path UNINDEXED,
+          tokenize  = 'trigram'
+        )
+      `);
+      return true;
+    } catch {
+      return false; // SQLite < 3.34 — fall back to LIKE
     }
+  }
+
+  private ensureSchemaVersion(): void {
+    const row = this.db
+      .prepare<[string], { value: string }>('SELECT value FROM index_metadata WHERE key = ?')
+      .get('schema_version');
+    const current = Number(row?.value ?? '0');
+    if (current >= Number(SCHEMA_VERSION)) return;
+    // v0/v1 → v2: build FTS index from existing nodes
+    if (current < 2) this.rebuildFts();
+    this.db
+      .prepare('INSERT OR REPLACE INTO index_metadata (key, value) VALUES (?, ?)')
+      .run('schema_version', SCHEMA_VERSION);
+  }
+
+  /** Clear all nodes and edges. Used before a full workspace re-index (see migration v2). */
+  clearAll(): void {
+    this.db.transaction(() => {
+      this.db.exec('DELETE FROM edges');
+      this.db.exec('DELETE FROM nodes');
+      if (this.ftsReady) this.db.exec('DELETE FROM nodes_fts');
+    })();
+  }
+
+  /** Rebuild the FTS5 search index from the current nodes table. */
+  rebuildFts(): void {
+    if (!this.ftsReady) return;
+    this.db.exec('DELETE FROM nodes_fts');
+    this.db.exec(`
+      INSERT INTO nodes_fts(id, name, type, file_path)
+      SELECT id, name, type, file_path FROM nodes
+    `);
+  }
+
+  /** Sync FTS5 for one file. Called by the file-save watcher after a single-file re-index. */
+  updateFtsForFile(relPath: string): void {
+    if (!this.ftsReady) return;
+    this.db.prepare('DELETE FROM nodes_fts WHERE file_path = ?').run(relPath);
+    const rows = this.db
+      .prepare<[string], { id: string; name: string; type: string; file_path: string }>(
+        'SELECT id, name, type, file_path FROM nodes WHERE file_path = ?',
+      )
+      .all(relPath);
+    if (rows.length === 0) return;
+    const stmt = this.db.prepare(
+      'INSERT OR IGNORE INTO nodes_fts(id, name, type, file_path) VALUES(?, ?, ?, ?)',
+    );
+    this.db.transaction(() => {
+      for (const r of rows) stmt.run(r.id, r.name, r.type, r.file_path);
+    })();
   }
 
   // ── Nodes ──────────────────────────────────────────────────────────────────
@@ -154,12 +215,37 @@ export class GraphDatabase {
   }
 
   searchNodes(query: string, limit = 20): GraphNode[] {
-    const rows = this.db
+    if (this.ftsReady) {
+      try {
+        // Wrap in double-quotes for FTS5 phrase/substring match (trigram tokenizer).
+        // Escape any embedded double-quotes to avoid malformed query errors.
+        const phraseQuery = '"' + query.replace(/"/g, '""') + '"';
+        const rows = this.db
+          .prepare<[string, number], Record<string, unknown>>(
+            `SELECT n.*
+             FROM nodes_fts
+             JOIN nodes n ON n.id = nodes_fts.id
+             WHERE nodes_fts MATCH ?
+               AND nodes_fts.file_path NOT LIKE '.next/%'
+             ORDER BY length(n.name)
+             LIMIT ?`,
+          )
+          .all(phraseQuery, limit);
+        return rows.map(r => this.deserializeNode(r));
+      } catch {
+        // Malformed FTS query (e.g. single/double-char below trigram minimum) — fall through
+      }
+    }
+    return this.db
       .prepare<[string, number], Record<string, unknown>>(
-        "SELECT * FROM nodes WHERE name LIKE ? ORDER BY length(name) LIMIT ?",
+        `SELECT * FROM nodes
+         WHERE name LIKE ?
+           AND file_path NOT LIKE '.next/%'
+         ORDER BY length(name)
+         LIMIT ?`,
       )
-      .all(`%${query}%`, limit);
-    return rows.map(r => this.deserializeNode(r));
+      .all(`%${query}%`, limit)
+      .map(r => this.deserializeNode(r));
   }
 
   getNodesForFile(filePath: string): GraphNode[] {
@@ -178,9 +264,16 @@ export class GraphDatabase {
   }
 
   upsertEdges(edges: GraphEdge[]): void {
-    const stmt = this.db.prepare('INSERT OR IGNORE INTO edges (source_id, target_id, type) VALUES (?, ?, ?)');
+    // Conditional INSERT: silently skip edges whose source or target node isn't in the DB.
+    // This handles external-library references and preserves FK integrity without errors.
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO edges (source_id, target_id, type)
+      SELECT ?, ?, ?
+      WHERE EXISTS (SELECT 1 FROM nodes WHERE id = ?)
+        AND EXISTS (SELECT 1 FROM nodes WHERE id = ?)
+    `);
     const tx = this.db.transaction((rows: GraphEdge[]) => {
-      for (const e of rows) stmt.run(e.source_id, e.target_id, e.type);
+      for (const e of rows) stmt.run(e.source_id, e.target_id, e.type, e.source_id, e.target_id);
     });
     tx(edges);
   }
@@ -292,7 +385,24 @@ export class GraphDatabase {
         ? Number(this.getMeta('last_index_duration_ms'))
         : null,
       schema_version: this.getMeta('schema_version') ?? SCHEMA_VERSION,
+      ...this._readQueryStats(),
     };
+  }
+
+  private _readQueryStats(): { query_count: number; estimated_token_savings: number } {
+    const row = this.db
+      .prepare<[string, string], { value: string }>('SELECT value FROM agent_memory WHERE agent_id = ? AND key = ?')
+      .get('__system', 'query_stats');
+    if (!row) return { query_count: 0, estimated_token_savings: 0 };
+    try {
+      const parsed = JSON.parse(row.value) as { total?: number; token_savings?: number };
+      return {
+        query_count: parsed.total ?? 0,
+        estimated_token_savings: parsed.token_savings ?? 0,
+      };
+    } catch {
+      return { query_count: 0, estimated_token_savings: 0 };
+    }
   }
 
   getAllNodes(): GraphNode[] {
