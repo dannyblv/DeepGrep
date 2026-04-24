@@ -5,6 +5,7 @@ import { GraphDatabase } from './db/GraphDatabase';
 import { indexerExists, indexWorkspace, reindexFile as rustReindexFile } from './indexer/RustIndexer';
 import { McpServerProvider } from './mcp/McpServerProvider';
 import { GraphPanel } from './webview/GraphPanel';
+import { HowToUsePanel } from './webview/HowToUsePanel';
 import { SidebarProvider } from './webview/SidebarProvider';
 import { ShellIntegration } from './terminal/ShellIntegration';
 import { HookManager } from './hooks/HookManager';
@@ -121,7 +122,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
 
     vscode.commands.registerCommand('deepgrep.showOnboarding', () => {
-      graphPanel?.showOnboarding();
+      HowToUsePanel.show();
     }),
 
     vscode.commands.registerCommand('deepgrep.clearMemory', async () => {

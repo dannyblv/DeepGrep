@@ -22,7 +22,6 @@ export default function App() {
   const [detail, setDetail] = useState<NodeDetailData | null>(null);
   const [indexing, setIndexing] = useState<{ progress: number; message: string } | null>(null);
   const [activeQuery, setActiveQuery] = useState<{ tool: string; fading: boolean } | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const [graphReady, setGraphReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -47,7 +46,6 @@ export default function App() {
           break;
         case 'nodeDetail':
           setDetail({ node: msg.node });
-          setShowOnboarding(false);
           break;
         case 'indexing':
           setIndexing({ progress: msg.progress, message: msg.message });
@@ -59,11 +57,6 @@ export default function App() {
             setActiveQuery(q => q ? { ...q, fading: true } : null);
             queryTimer.current = setTimeout(() => setActiveQuery(null), 400);
           }, 1800);
-          break;
-        case 'showOnboarding':
-          setShowOnboarding(true);
-          setTab('graph');
-          setDetail(null);
           break;
       }
     });
@@ -84,12 +77,9 @@ export default function App() {
     setSearchFocusId(nodeId);
     setSearchQuery('');
     setSearchFocused(false);
-    setShowOnboarding(false);
   };
 
-  // Only show onboarding after the first graphUpdate has arrived and confirmed 0 nodes.
-  // Don't gate on !indexing — if re-indexing starts with 0 nodes we still want the guide visible.
-  const showingOnboarding = showOnboarding || (graphReady && nodes.length === 0);
+  const showingOnboarding = graphReady && nodes.length === 0;
 
   return (
     <div className="app">
@@ -104,10 +94,10 @@ export default function App() {
           )}
         </span>
         <nav>
-          <button className={tab === 'graph' ? 'active' : ''} onClick={() => { setTab('graph'); setShowOnboarding(false); }}>
+          <button className={tab === 'graph' ? 'active' : ''} onClick={() => setTab('graph')}>
             Graph
           </button>
-          <button className={tab === 'stats' ? 'active' : ''} onClick={() => { setTab('stats'); setShowOnboarding(false); postMessage({ type: 'requestStats' }); }}>
+          <button className={tab === 'stats' ? 'active' : ''} onClick={() => { setTab('stats'); postMessage({ type: 'requestStats' }); }}>
             Stats
           </button>
         </nav>
@@ -156,39 +146,41 @@ export default function App() {
       )}
 
       <main className="content">
-        {tab === 'graph' && !graphReady && !indexing && !showOnboarding && (
+        {tab === 'graph' && !graphReady && !showingOnboarding && (
           <div className="graph-loading">
             <span className="graph-loading-hex">⬡</span>
             <span>Loading graph…</span>
           </div>
         )}
         {tab === 'graph' && showingOnboarding && (
-          <OnboardingView
-            canClose={nodes.length > 0}
-            onClose={() => setShowOnboarding(false)}
-          />
+          <OnboardingView />
         )}
-        {tab === 'graph' && !showingOnboarding && (nodes.length > 0 || indexing) && (
+        {tab === 'graph' && graphReady && !showingOnboarding && nodes.length > 0 && (
           <div className="graph-layout">
             <GraphView
               nodes={nodes}
               edges={edges}
               highlighted={highlighted}
-              onNodeClick={(nodeId) => { setSearchFocusId(null); postMessage({ type: 'nodeClick', nodeId }); }}
+              onNodeClick={(nodeId) => { setSearchFocusId(null); postMessage({ type: 'nodeNavigate', nodeId }); }}
               searchFocusId={searchFocusId}
-              onBgTap={() => setSearchFocusId(null)}
+              onBgTap={() => { setSearchFocusId(null); setHighlighted(null); }}
             />
             {detail ? (
               <NodeDetail
                 data={detail.node}
                 onClose={() => setDetail(null)}
-                onNavigate={(nodeId) => postMessage({ type: 'nodeClick', nodeId })}
+                onNavigate={(nodeId) => { setSearchFocusId(nodeId); postMessage({ type: 'nodeNavigate', nodeId }); }}
+                onFileClick={(file) => {
+                  setSearchFocusId(null);
+                  const ids = nodes.filter(n => n.file === file).map(n => n.id);
+                  setHighlighted(ids.length ? { ids, color: 'selected' } : null);
+                }}
               />
             ) : nodes.length > 0 ? (
               <GraphSummary
                 nodes={nodes}
                 edges={edges}
-                onNodeClick={(nodeId) => postMessage({ type: 'nodeClick', nodeId })}
+                onNodeClick={(nodeId) => postMessage({ type: 'nodeNavigate', nodeId })}
               />
             ) : null}
           </div>

@@ -159,13 +159,18 @@ nav button:hover { color: var(--text); }
 
 /* Caller/callee row: label button + open-file icon */
 .nd-ref-row { display: flex; align-items: flex-start; gap: 4px; }
+.nd-ref-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .node-link {
-  flex: 1; min-width: 0; background: none; border: none; color: var(--accent); cursor: pointer;
-  text-align: left; display: flex; flex-direction: column; gap: 1px; padding: 0;
+  min-width: 0; background: none; border: none; color: var(--accent); cursor: pointer;
+  text-align: left; padding: 0;
 }
-.node-link:hover { text-decoration: underline; }
-.node-link-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.node-link-file { font-size: 10px; color: var(--text-dim); word-break: break-all; overflow-wrap: anywhere; }
+.node-link:hover .node-link-label { text-decoration: underline; }
+.node-link-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; display: block; }
+.node-link-file {
+  font-size: 10px; color: var(--text-dim); word-break: break-all; overflow-wrap: anywhere;
+  cursor: pointer; transition: color .12s;
+}
+.node-link-file:hover { color: var(--accent); }
 .nd-open-btn {
   flex-shrink: 0; background: none; border: 1px solid var(--border); border-radius: 3px;
   color: var(--text-dim); cursor: pointer; font-size: 11px; padding: 1px 5px;

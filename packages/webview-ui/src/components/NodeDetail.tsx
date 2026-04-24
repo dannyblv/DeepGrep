@@ -6,9 +6,10 @@ interface Props {
   data: CyNode & { snippet: string; callers: CyNode[]; callees: CyNode[] };
   onClose: () => void;
   onNavigate: (nodeId: string) => void;
+  onFileClick?: (file: string) => void;
 }
 
-export function NodeDetail({ data, onClose, onNavigate }: Props) {
+export function NodeDetail({ data, onClose, onNavigate, onFileClick }: Props) {
   const [width, setWidth] = useState(280);
   const dragging = useRef(false);
   const startX = useRef(0);
@@ -60,10 +61,18 @@ export function NodeDetail({ data, onClose, onNavigate }: Props) {
           <ul>
             {data.callers.map(c => (
               <li key={c.id} className="nd-ref-row">
-                <button className="node-link" onClick={() => onNavigate(c.id)}>
-                  <span className="node-link-label">{c.label}</span>
-                  <span className="node-link-file">{c.file}</span>
-                </button>
+                <div className="nd-ref-main">
+                  <button className="node-link" onClick={() => onNavigate(c.id)}>
+                    <span className="node-link-label">{c.label}</span>
+                  </button>
+                  <span
+                    className="node-link-file"
+                    onClick={() => onFileClick?.(c.file)}
+                    title={`Highlight nodes in ${c.file.split('/').pop()}`}
+                  >
+                    {c.file.split('/').pop()}
+                  </span>
+                </div>
                 <button
                   className="nd-open-btn"
                   title={`Open ${c.file}:${c.line} in editor`}
@@ -83,10 +92,18 @@ export function NodeDetail({ data, onClose, onNavigate }: Props) {
           <ul>
             {data.callees.map(c => (
               <li key={c.id} className="nd-ref-row">
-                <button className="node-link" onClick={() => onNavigate(c.id)}>
-                  <span className="node-link-label">{c.label}</span>
-                  <span className="node-link-file">{c.file}</span>
-                </button>
+                <div className="nd-ref-main">
+                  <button className="node-link" onClick={() => onNavigate(c.id)}>
+                    <span className="node-link-label">{c.label}</span>
+                  </button>
+                  <span
+                    className="node-link-file"
+                    onClick={() => onFileClick?.(c.file)}
+                    title={`Highlight nodes in ${c.file.split('/').pop()}`}
+                  >
+                    {c.file.split('/').pop()}
+                  </span>
+                </div>
                 <button
                   className="nd-open-btn"
                   title={`Open ${c.file}:${c.line} in editor`}

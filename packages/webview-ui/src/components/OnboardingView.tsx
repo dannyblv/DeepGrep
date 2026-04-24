@@ -43,17 +43,9 @@ const BENEFITS = [
   },
 ];
 
-interface Props {
-  canClose?: boolean;
-  onClose?: () => void;
-}
-
-export function OnboardingView({ canClose, onClose }: Props) {
+export function OnboardingView() {
   return (
     <div className="ob-panel">
-      {canClose && (
-        <button className="ob-close-btn" onClick={onClose} title="Close guide">✕</button>
-      )}
       <div className="ob-hero">
         <div className="ob-hex">⬡</div>
         <h1 className="ob-heading">DeepGrep</h1>

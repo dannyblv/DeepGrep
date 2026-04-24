@@ -233,8 +233,8 @@ body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);col
 <!-- Main content (shown when indexed) -->
 <div class="main" id="main">
 
-  <!-- Mini dependency graph visualization -->
-  <div class="graph-chip">
+  <!-- Mini dependency graph visualization (click to open graph panel) -->
+  <div class="graph-chip" id="graphChip" style="cursor:pointer" title="Open dependency graph">
     <div class="chip-label">Dependency graph</div>
     <div class="chip-stat"><span class="chip-stat-val" id="gcNodes">—</span><span class="chip-stat-lbl">nodes</span></div>
     <svg class="mini-svg" viewBox="0 0 220 48" xmlns="http://www.w3.org/2000/svg">
@@ -266,6 +266,7 @@ body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);col
       <circle cx="204" cy="24" r="4.5" fill="#4ec9a8" class="mg-hub" style="animation-delay:.9s"/>
     </svg>
   </div>
+  <div style="font-size:11px;color:var(--vscode-descriptionForeground);text-align:center;margin-top:4px;opacity:.7">↑ Click to open dependency graph</div>
 
   <!-- Index stats -->
   <div class="sec">
@@ -303,7 +304,6 @@ body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);col
   <div class="sec">
     <div class="sh">Actions</div>
     <div class="actions">
-      <button class="btn bp" id="btnGraph">⬡&nbsp; Open Dependency Graph</button>
       <button class="btn bs" id="btnIdx">↻&nbsp; Re-index Workspace</button>
       <button class="btn bh" id="btnHow">?&nbsp; How to use</button>
     </div>
@@ -320,7 +320,7 @@ const prog=document.getElementById('prog');
 const onboard=document.getElementById('onboard');
 const main=document.getElementById('main');
 
-document.getElementById('btnGraph').onclick=()=>vsc.postMessage({type:'openGraph'});
+document.getElementById('graphChip').onclick=()=>vsc.postMessage({type:'openGraph'});
 document.getElementById('btnIdx').onclick=()=>vsc.postMessage({type:'reindex'});
 document.getElementById('btnIdxOb').onclick=()=>vsc.postMessage({type:'reindex'});
 document.getElementById('btnHow').onclick=()=>vsc.postMessage({type:'howToUse'});

@@ -9,7 +9,6 @@ export class GraphPanel implements vscode.Disposable {
   private queryCount = 0;
   private tokenSavings = 0;
   private disposables: vscode.Disposable[] = [];
-  private pendingOnboarding = false;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -54,10 +53,6 @@ export class GraphPanel implements vscode.Disposable {
       case 'ready':
         this.sendGraph();
         this.sendStats();
-        if (this.pendingOnboarding) {
-          this.pendingOnboarding = false;
-          this.send({ type: 'showOnboarding' });
-        }
         break;
       case 'requestStats':
         this.sendStats();
@@ -95,6 +90,23 @@ export class GraphPanel implements vscode.Disposable {
             }),
           )
           .then(undefined, () => undefined);
+        break;
+      }
+      case 'nodeNavigate': {
+        // Same as nodeClick but does NOT open the file — used by NodeDetail caller/callee links
+        const nav = this.db.getNode(msg.nodeId);
+        if (!nav) break;
+        const navCallerEdges = this.db.getIncoming(nav.id);
+        const navCalleeEdges = this.db.getOutgoing(nav.id);
+        this.send({
+          type: 'nodeDetail',
+          node: {
+            ...this.toCyNode(nav),
+            snippet: nav.code_snippet,
+            callers: navCallerEdges.map(e => this.db.getNode(e.source_id)).filter(Boolean).map(n => this.toCyNode(n!)),
+            callees: navCalleeEdges.map(e => this.db.getNode(e.target_id)).filter(Boolean).map(n => this.toCyNode(n!)),
+          },
+        });
         break;
       }
       case 'openFile': {
@@ -142,18 +154,6 @@ export class GraphPanel implements vscode.Disposable {
 
   notifyToolQuery(toolName: string): void {
     this.send({ type: 'toolQuery', toolName });
-  }
-
-  showOnboarding(): void {
-    const panelAlreadyOpen = !!this.panel;
-    this.show();
-    if (panelAlreadyOpen) {
-      // Panel was already alive — send immediately (webview is running)
-      this.send({ type: 'showOnboarding' });
-    } else {
-      // Freshly created panel: wait for the 'ready' ping from the webview
-      this.pendingOnboarding = true;
-    }
   }
 
   sendProgress(progress: number, message: string): void {

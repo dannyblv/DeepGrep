@@ -28,6 +28,7 @@ export interface StatsPayload {
 export type WebviewToExtMsg =
   | { type: 'ready' }
   | { type: 'nodeClick'; nodeId: string }
+  | { type: 'nodeNavigate'; nodeId: string }
   | { type: 'openFile'; nodeId: string }
   | { type: 'requestHighlight'; nodeIds: string[] }
   | { type: 'requestStats' }
@@ -40,5 +41,4 @@ export type ExtToWebviewMsg =
   | { type: 'stats'; data: StatsPayload }
   | { type: 'indexing'; progress: number; message: string }
   | { type: 'nodeDetail'; node: CyNode & { snippet: string; callers: CyNode[]; callees: CyNode[] } }
-  | { type: 'toolQuery'; toolName: string }
-  | { type: 'showOnboarding' };
+  | { type: 'toolQuery'; toolName: string };

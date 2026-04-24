@@ -294,8 +294,11 @@ export function GraphView({ nodes, edges, highlighted, onNodeClick, searchFocusI
     applyFocus(cy, searchFocusId);
     const node = cy.getElementById(searchFocusId);
     if (node.length) {
+      // Fit to the node's immediate neighborhood so surrounding context stays visible
+      const neighborhood = (node as Cytoscape.NodeSingular).neighborhood();
+      const group = neighborhood.add(node);
       cy.animate(
-        { fit: { eles: node, padding: 120 } },
+        { fit: { eles: group.length > 1 ? group : node, padding: 160 } },
         { duration: 450, easing: 'ease-out-quad' as Cytoscape.Css.TransitionTimingFunction },
       );
     }
