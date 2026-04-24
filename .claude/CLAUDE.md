@@ -9,21 +9,34 @@ context that is more relevant and uses fewer tokens than manual searching.
 The PreToolUse hook will **block** recursive `grep`/`find` calls when the
 graph is indexed.
 
-## Output indicator (required)
+## Output indicator (REQUIRED — no exceptions)
 
-Before calling ANY `mcp__deepgrep__*` tool, output this exact line in your
+**Before calling ANY `mcp__deepgrep__*` tool**, output this exact line in your
 response text (replace `<tool>` with the tool name):
 
 ```
 ⬡ DeepGrep — <tool>
 ```
 
-Examples:
+The ⬡ character is U+2B21 (WHITE MEDIUM STAR / hexagon outline). Copy it exactly.
+
+**Do NOT use any other format.** These are all wrong:
+- ~~`DeepGrep [get_stats]`~~
+- ~~`Deepgrep: search_graph`~~
+- ~~`[DeepGrep] find_related_nodes`~~
+- ~~`⬡ deepgrep — get_stats`~~ (wrong case)
+
+**Correct examples — use these exactly:**
 - `⬡ DeepGrep — search_graph`
 - `⬡ DeepGrep — get_context_for_symbol`
 - `⬡ DeepGrep — get_dependency_chain`
+- `⬡ DeepGrep — find_related_nodes`
+- `⬡ DeepGrep — get_stats`
+- `⬡ DeepGrep — get_agent_memory`
+- `⬡ DeepGrep — set_agent_memory`
 
-This makes graph queries visible in the chat — do not skip it.
+This line must appear in your **text output** (not a code block) immediately before the tool call.
+The webview animates the ⬡ logo when it receives the tool signal — the indicator drives that.
 
 ## Which tool to use
 

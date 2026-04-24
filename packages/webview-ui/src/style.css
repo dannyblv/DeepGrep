@@ -25,7 +25,49 @@
   background: var(--surface); border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.logo { font-weight: 600; color: var(--accent); margin-right: 8px; }
+.logo { font-weight: 600; color: var(--accent); margin-right: 8px; display: flex; align-items: center; gap: 4px; }
+
+@keyframes hexIdle {
+  0%, 100% { opacity: 0.75; }
+  50%       { opacity: 1; text-shadow: 0 0 6px #4a9eff55; }
+}
+@keyframes hexActive {
+  0%   { transform: rotate(0deg);   text-shadow: 0 0 8px var(--accent); }
+  100% { transform: rotate(360deg); text-shadow: 0 0 18px var(--accent), 0 0 32px #4a9eff66; }
+}
+@keyframes badgeIn {
+  from { opacity: 0; transform: translateX(-6px); max-width: 0; }
+  to   { opacity: 1; transform: translateX(0);    max-width: 160px; }
+}
+@keyframes badgeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.logo-hex {
+  display: inline-block;
+  animation: hexIdle 3s ease-in-out infinite;
+  transform-origin: center;
+}
+.logo-hex.querying {
+  animation: hexActive 0.9s linear infinite;
+}
+.query-badge {
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 10px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1px 7px;
+  animation: badgeIn 0.2s ease-out forwards;
+}
+.query-badge.fading {
+  animation: badgeOut 0.4s ease-in forwards;
+}
 nav { display: flex; gap: 4px; flex: 1; }
 nav button {
   background: none; border: 1px solid transparent; color: var(--text-dim);

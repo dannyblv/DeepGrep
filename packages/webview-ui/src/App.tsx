@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { GraphView } from './components/GraphView';
 import { StatsPanel } from './components/StatsPanel';
 import { NodeDetail } from './components/NodeDetail';
@@ -20,6 +20,8 @@ export default function App() {
   const [stats, setStats] = useState<StatsPayload | null>(null);
   const [detail, setDetail] = useState<NodeDetailData | null>(null);
   const [indexing, setIndexing] = useState<{ progress: number; message: string } | null>(null);
+  const [activeQuery, setActiveQuery] = useState<{ tool: string; fading: boolean } | null>(null);
+  const queryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const unsub = onMessage((msg: ExtToWebviewMsg) => {
@@ -42,6 +44,14 @@ export default function App() {
         case 'indexing':
           setIndexing({ progress: msg.progress, message: msg.message });
           break;
+        case 'toolQuery':
+          if (queryTimer.current) clearTimeout(queryTimer.current);
+          setActiveQuery({ tool: msg.toolName, fading: false });
+          queryTimer.current = setTimeout(() => {
+            setActiveQuery(q => q ? { ...q, fading: true } : null);
+            queryTimer.current = setTimeout(() => setActiveQuery(null), 400);
+          }, 1800);
+          break;
       }
     });
 
@@ -53,7 +63,15 @@ export default function App() {
   return (
     <div className="app">
       <header className="toolbar">
-        <span className="logo">⬡ DeepGrep</span>
+        <span className="logo">
+          <span className={`logo-hex${activeQuery ? ' querying' : ''}`}>⬡</span>
+          {' DeepGrep'}
+          {activeQuery && (
+            <span className={`query-badge${activeQuery.fading ? ' fading' : ''}`}>
+              {activeQuery.tool}
+            </span>
+          )}
+        </span>
         <nav>
           <button className={tab === 'graph' ? 'active' : ''} onClick={() => setTab('graph')}>
             Graph

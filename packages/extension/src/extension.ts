@@ -82,6 +82,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await mcpProvider.start();
   context.subscriptions.push(mcpProvider);
 
+  // ── MCP activity watcher: animates the webview ⬡ on each tool call ─────────
+  const activityPath = resolve(workspaceRoot, '.deepgrep', 'mcp-activity.json');
+  const activityWatcher = vscode.workspace.createFileSystemWatcher(activityPath);
+  const handleActivity = () => {
+    try {
+      const { tool } = JSON.parse(readFileSync(activityPath, 'utf8'));
+      if (typeof tool === 'string') graphPanel?.notifyToolQuery(tool);
+    } catch { /* file missing or malformed — ignore */ }
+  };
+  activityWatcher.onDidChange(handleActivity);
+  activityWatcher.onDidCreate(handleActivity);
+  context.subscriptions.push(activityWatcher);
+
   // ── Commands ───────────────────────────────────────────────────────────────
   context.subscriptions.push(
     vscode.commands.registerCommand('deepgrep.openGraph', () => {

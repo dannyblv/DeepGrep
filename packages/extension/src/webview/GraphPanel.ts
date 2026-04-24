@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { readFileSync, existsSync } from 'fs';
+
 import { resolve } from 'path';
 import type { GraphDatabase, GraphNode } from '../db/GraphDatabase';
 import type { WebviewToExtMsg, ExtToWebviewMsg, CyNode, CyEdge } from './messages';
@@ -117,6 +117,10 @@ export class GraphPanel implements vscode.Disposable {
       // Rough token savings: assume each served node saves ~200 tokens vs. full-file read
       this.tokenSavings += nodeIds.length * 200;
     }
+  }
+
+  notifyToolQuery(toolName: string): void {
+    this.send({ type: 'toolQuery', toolName });
   }
 
   sendProgress(progress: number, message: string): void {

@@ -38,4 +38,5 @@ export type ExtToWebviewMsg =
   | { type: 'highlight'; nodeIds: string[]; color: 'ai' | 'error' | 'selected' }
   | { type: 'stats'; data: StatsPayload }
   | { type: 'indexing'; progress: number; message: string }
-  | { type: 'nodeDetail'; node: CyNode & { snippet: string; callers: CyNode[]; callees: CyNode[] } };
+  | { type: 'nodeDetail'; node: CyNode & { snippet: string; callers: CyNode[]; callees: CyNode[] } }
+  | { type: 'toolQuery'; toolName: string };

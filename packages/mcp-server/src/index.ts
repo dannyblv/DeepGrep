@@ -3,12 +3,13 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { resolve } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 import { GraphDatabase } from './db.js';
 
 const DB_PATH = process.env.DEEPGREP_DB_PATH ?? resolve(process.cwd(), '.deepgrep', 'graph.db');
 const WORKSPACE = process.env.DEEPGREP_WORKSPACE ?? process.cwd();
 const TOKEN_BUDGET = Number(process.env.DEEPGREP_TOKEN_BUDGET ?? 4000);
+const ACTIVITY_PATH = DB_PATH.replace('graph.db', 'mcp-activity.json');
 
 if (!existsSync(DB_PATH)) {
   process.stderr.write(`DeepGrep MCP: graph.db not found at ${DB_PATH}. Run "DeepGrep: Re-index Workspace" in VS Code first.\n`);
@@ -27,6 +28,7 @@ server.tool(
     agent_id: z.string().optional().describe('Calling agent ID for domain filtering'),
   },
   async ({ symbol, file_path, agent_id }) => {
+    signalActivity('get_dependency_chain');
     const candidates = db.searchNodes(symbol, 5);
     const filtered = file_path
       ? candidates.filter(n => n.file_path.includes(file_path))
@@ -73,6 +75,7 @@ server.tool(
     agent_id: z.string().optional(),
   },
   async ({ symbol, file_path, hops, agent_id }) => {
+    signalActivity('find_related_nodes');
     let startId: string | null = null;
     if (symbol) {
       const nodes = db.searchNodes(symbol, 3);
@@ -115,6 +118,7 @@ server.tool(
     agent_id: z.string().optional(),
   },
   async ({ symbol, file_path, agent_id }) => {
+    signalActivity('get_context_for_symbol');
     const candidates = db.searchNodes(symbol, 5);
     const node = file_path
       ? candidates.find(n => n.file_path.includes(file_path)) ?? candidates[0]
@@ -155,6 +159,7 @@ server.tool(
     agent_id: z.string().optional(),
   },
   async ({ query, limit, agent_id }) => {
+    signalActivity('search_graph');
     const nodes = db.searchNodes(query, limit).filter(n => agentFilter(n, agent_id));
     if (nodes.length > 0) {
       trackQuery(agent_id, nodes[0].id, nodes.map(n => n.id));
@@ -176,6 +181,7 @@ server.tool(
   'Read a persistent memory value bound to this agent.',
   { agent_id: z.string(), key: z.string() },
   async ({ agent_id, key }) => {
+    signalActivity('get_agent_memory');
     const value = db.getAgentMemory(agent_id, key);
     return {
       content: [{ type: 'text', text: value ?? `(no memory for key "${key}")` }],
@@ -194,6 +200,7 @@ server.tool(
     node_id: z.string().optional(),
   },
   async ({ agent_id, key, value, node_id }) => {
+    signalActivity('set_agent_memory');
     db.setAgentMemory(agent_id, key, value, node_id ?? null);
     return { content: [{ type: 'text', text: `Memory saved: ${key}` }] };
   },
@@ -205,6 +212,7 @@ server.tool(
   'Get DeepGrep index stats: node/edge counts, last index time, efficiency metrics.',
   {},
   async () => {
+    signalActivity('get_stats');
     const stats = db.getStats();
     const queryStats = db.getAgentMemory('__system', 'query_stats');
     const parsed = queryStats ? JSON.parse(queryStats) : { total: 0, token_savings: 0 };
@@ -227,6 +235,14 @@ server.tool(
 );
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function signalActivity(toolName: string): void {
+  try {
+    writeFileSync(ACTIVITY_PATH, JSON.stringify({ tool: toolName, ts: Date.now() }));
+  } catch {
+    // Non-fatal — extension host may not be running
+  }
+}
 
 const AGENT_DOMAIN_MAP: Record<string, string[]> = {
   indexer: ['packages/extension/src/indexer', 'packages/extension/src/db'],
