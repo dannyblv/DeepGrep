@@ -6,6 +6,9 @@ dist/
 out/
 *.vsix
 
+# Rust build artifacts
+target/
+
 # Tree-sitter WASM grammars (downloaded at build time via tree-sitter-wasms)
 packages/extension/grammars/
 

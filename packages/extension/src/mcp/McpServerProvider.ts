@@ -1,45 +1,54 @@
 import * as vscode from 'vscode';
-import { spawn, ChildProcess } from 'child_process';
 import { resolve } from 'path';
-import { writeFileSync } from 'fs';
+import { existsSync, writeFileSync } from 'fs';
 import type { GraphDatabase } from '../db/GraphDatabase';
 
-/**
- * Registers DeepGrep's MCP server with VS Code's Language Model API
- * so Claude Code and Copilot can discover it automatically.
- *
- * Also writes .mcp.json to the workspace root so the Claude Code CLI
- * picks it up without needing VS Code.
- */
+/** Path to compiled Rust MCP server binary. */
+function mcpBinaryPath(workspaceRoot: string): string {
+  return resolve(workspaceRoot, 'target', 'release', 'deepgrep-mcp');
+}
+
+/** Fallback: legacy Node.js MCP server bundled with the extension. */
+function legacyScriptPath(extensionPath: string): string {
+  return resolve(extensionPath, 'dist', 'mcp-server.js');
+}
+
 export class McpServerProvider implements vscode.Disposable {
-  private serverProcess: ChildProcess | null = null;
   private registration: vscode.Disposable | null = null;
-  private readonly serverScriptPath: string;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly db: GraphDatabase,
     private readonly workspaceRoot: string,
-  ) {
-    this.serverScriptPath = resolve(context.extensionPath, 'dist', 'mcp-server.js');
-  }
+  ) {}
 
   async start(): Promise<void> {
     this.writeMcpJson();
     this.registerWithVSCode();
   }
 
+  private serverCommand(): { command: string; args: string[] } {
+    const rustBin = mcpBinaryPath(this.workspaceRoot);
+    if (existsSync(rustBin)) {
+      return { command: rustBin, args: [] };
+    }
+    // Fall back to the bundled Node.js server if Rust binary not yet built
+    return { command: 'node', args: [legacyScriptPath(this.context.extensionPath)] };
+  }
+
+  private serverEnv(): Record<string, string> {
+    return {
+      DEEPGREP_DB_PATH: resolve(this.workspaceRoot, '.deepgrep', 'graph.db'),
+      DEEPGREP_WORKSPACE: this.workspaceRoot,
+      DEEPGREP_TOKEN_BUDGET: '4000',
+    };
+  }
+
   private writeMcpJson(): void {
+    const { command, args } = this.serverCommand();
     const mcpConfig = {
       mcpServers: {
-        deepgrep: {
-          command: 'node',
-          args: [this.serverScriptPath],
-          env: {
-            DEEPGREP_DB_PATH: resolve(this.workspaceRoot, '.deepgrep', 'graph.db'),
-            DEEPGREP_WORKSPACE: this.workspaceRoot,
-          },
-        },
+        deepgrep: { command, args, env: this.serverEnv() },
       },
     };
     try {
@@ -54,36 +63,23 @@ export class McpServerProvider implements vscode.Disposable {
   }
 
   private registerWithVSCode(): void {
-    // VS Code 1.99+ Language Model MCP registration
-    // Allows Claude Code to discover the server when running inside VS Code terminal
+    const { command, args } = this.serverCommand();
     const provider: vscode.McpServerDefinitionProvider = {
-      provideMcpServerDefinitions: () => {
-        return [
-          new vscode.McpStdioServerDefinition(
-            'DeepGrep',
-            'node',
-            [this.serverScriptPath],
-            {
-              DEEPGREP_DB_PATH: resolve(this.workspaceRoot, '.deepgrep', 'graph.db'),
-              DEEPGREP_WORKSPACE: this.workspaceRoot,
-            },
-          ),
-        ];
-      },
+      provideMcpServerDefinitions: () => [
+        new vscode.McpStdioServerDefinition('DeepGrep', command, args, this.serverEnv()),
+      ],
     };
-
     try {
       this.registration = vscode.lm.registerMcpServerDefinitionProvider(
         'deepgrep-mcp-provider',
         provider,
       );
     } catch {
-      // API may not be available in older VS Code — degrade gracefully to .mcp.json only
+      // VS Code < 1.99 — .mcp.json fallback is sufficient
     }
   }
 
   dispose(): void {
     this.registration?.dispose();
-    this.serverProcess?.kill();
   }
 }

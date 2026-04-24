@@ -1,0 +1,261 @@
+use anyhow::Result;
+use rusqlite::{Connection, OptionalExtension};
+use serde_json::Value;
+
+// ── Node search ───────────────────────────────────────────────────────────────
+
+pub fn search_nodes(conn: &Connection, query: &str, limit: usize) -> Result<Vec<Value>> {
+    // Try FTS5 trigram search first, fall back to LIKE
+    let fts_result = conn.prepare(
+        "SELECT n.id, n.name, n.type, n.file_path, n.start_line, n.end_line, n.code_snippet, n.node_hash
+         FROM nodes_fts JOIN nodes n ON n.id = nodes_fts.id
+         WHERE nodes_fts MATCH ?
+           AND nodes_fts.file_path NOT LIKE '.next/%'
+         ORDER BY length(n.name)
+         LIMIT ?",
+    ).and_then(|mut stmt| {
+        let phrase = format!("\"{}\"", query.replace('"', "\"\""));
+        let rows: Vec<Value> = stmt
+            .query_map(rusqlite::params![phrase, limit as i64], row_to_node)?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    });
+
+    match fts_result {
+        Ok(rows) if !rows.is_empty() => return Ok(rows),
+        _ => {}
+    }
+
+    // LIKE fallback
+    let mut stmt = conn.prepare(
+        "SELECT id, name, type, file_path, start_line, end_line, code_snippet, node_hash
+         FROM nodes
+         WHERE name LIKE ? AND file_path NOT LIKE '.next/%'
+         ORDER BY length(name) LIMIT ?",
+    )?;
+    let rows = stmt
+        .query_map(rusqlite::params![format!("%{}%", query), limit as i64], row_to_node)?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(rows)
+}
+
+fn row_to_node(row: &rusqlite::Row) -> rusqlite::Result<Value> {
+    Ok(serde_json::json!({
+        "id":        row.get::<_, String>(0)?,
+        "name":      row.get::<_, String>(1)?,
+        "type":      row.get::<_, String>(2)?,
+        "file":      row.get::<_, String>(3)?,
+        "start_line": row.get::<_, i64>(4)?,
+        "end_line":  row.get::<_, i64>(5)?,
+        "snippet":   row.get::<_, String>(6)?,
+        "node_hash": row.get::<_, String>(7)?,
+    }))
+}
+
+// ── Node by ID ────────────────────────────────────────────────────────────────
+
+pub fn get_node(conn: &Connection, id: &str) -> Result<Option<Value>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, type, file_path, start_line, end_line, code_snippet, metadata, node_hash
+         FROM nodes WHERE id = ?",
+    )?;
+    let row = stmt
+        .query_row([id], |row| {
+            Ok(serde_json::json!({
+                "id":        row.get::<_, String>(0)?,
+                "name":      row.get::<_, String>(1)?,
+                "type":      row.get::<_, String>(2)?,
+                "file":      row.get::<_, String>(3)?,
+                "start_line": row.get::<_, i64>(4)?,
+                "end_line":  row.get::<_, i64>(5)?,
+                "snippet":   row.get::<_, String>(6)?,
+                "metadata":  row.get::<_, String>(7)?,
+                "node_hash": row.get::<_, String>(8)?,
+            }))
+        })
+        .optional()?;
+    Ok(row)
+}
+
+// ── Edges ─────────────────────────────────────────────────────────────────────
+
+pub fn get_outgoing(conn: &Connection, node_id: &str) -> Result<Vec<Value>> {
+    get_edges(conn, "SELECT source_id, target_id, type FROM edges WHERE source_id = ?", node_id)
+}
+
+pub fn get_incoming(conn: &Connection, node_id: &str) -> Result<Vec<Value>> {
+    get_edges(conn, "SELECT source_id, target_id, type FROM edges WHERE target_id = ?", node_id)
+}
+
+fn get_edges(conn: &Connection, sql: &str, id: &str) -> Result<Vec<Value>> {
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt
+        .query_map([id], |r| {
+            Ok(serde_json::json!({
+                "source": r.get::<_, String>(0)?,
+                "target": r.get::<_, String>(1)?,
+                "type":   r.get::<_, String>(2)?,
+            }))
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(rows)
+}
+
+// ── BFS neighbourhood ─────────────────────────────────────────────────────────
+
+pub fn get_neighbourhood(conn: &Connection, start_id: &str, max_hops: usize) -> Result<Vec<String>> {
+    let mut visited = std::collections::HashSet::new();
+    visited.insert(start_id.to_string());
+    let mut frontier = vec![start_id.to_string()];
+
+    for _ in 0..max_hops {
+        if frontier.is_empty() {
+            break;
+        }
+        let placeholders = frontier.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let out_sql = format!("SELECT target_id FROM edges WHERE source_id IN ({})", placeholders);
+        let in_sql = format!("SELECT source_id FROM edges WHERE target_id IN ({})", placeholders);
+
+        let mut next: Vec<String> = Vec::new();
+        for sql in &[out_sql, in_sql] {
+            let mut stmt = conn.prepare(sql)?;
+            let params: Vec<&dyn rusqlite::ToSql> =
+                frontier.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+            let ids: Vec<String> = stmt
+                .query_map(params.as_slice(), |r| r.get(0))?
+                .filter_map(|r| r.ok())
+                .collect();
+            next.extend(ids);
+        }
+
+        frontier = next.into_iter().filter(|id| visited.insert(id.clone())).collect();
+    }
+
+    visited.remove(start_id);
+    Ok(visited.into_iter().collect())
+}
+
+// ── Dependency chain (DFS, callee direction) ─────────────────────────────────
+
+pub fn get_dep_chain(conn: &Connection, start_id: &str, cap: usize) -> Result<Vec<String>> {
+    let mut visited = std::collections::HashSet::new();
+    let mut stack = vec![start_id.to_string()];
+    let mut stmt = conn.prepare("SELECT target_id FROM edges WHERE source_id = ?")?;
+
+    while let Some(id) = stack.pop() {
+        if visited.len() >= cap || visited.contains(&id) {
+            continue;
+        }
+        visited.insert(id.clone());
+        let deps: Vec<String> = stmt
+            .query_map([&id], |r| r.get(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        stack.extend(deps);
+    }
+
+    visited.remove(start_id);
+    Ok(visited.into_iter().collect())
+}
+
+// ── Agent memory ──────────────────────────────────────────────────────────────
+
+pub fn get_memory(conn: &Connection, agent_id: &str, key: &str) -> Result<Option<Value>> {
+    let row = conn
+        .query_row(
+            "SELECT value, stale_at FROM agent_memory WHERE agent_id = ? AND key = ?",
+            [agent_id, key],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<i64>>(1)?)),
+        )
+        .optional()?;
+
+    Ok(row.map(|(value, stale_at)| {
+        let stale = stale_at.is_some();
+        serde_json::json!({"value": value, "stale": stale})
+    }))
+}
+
+pub fn set_memory(
+    conn: &Connection,
+    agent_id: &str,
+    key: &str,
+    value: &str,
+    node_id: Option<&str>,
+) -> Result<()> {
+    let id = format!("{}:{}", agent_id, key);
+    let now = now_ms();
+    conn.execute(
+        "INSERT OR REPLACE INTO agent_memory (id, agent_id, node_id, key, value, created_at, stale_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL)",
+        rusqlite::params![id, agent_id, node_id, key, value, now],
+    )?;
+    Ok(())
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+pub fn get_stats(conn: &Connection) -> Result<Value> {
+    let node_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))?;
+    let edge_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM edges", [], |r| r.get(0))?;
+
+    let last_indexed: Option<String> = conn
+        .query_row(
+            "SELECT value FROM index_metadata WHERE key = 'last_indexed'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+
+    let duration_ms: Option<String> = conn
+        .query_row(
+            "SELECT value FROM index_metadata WHERE key = 'last_index_duration_ms'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+
+    let schema_version: Option<String> = conn
+        .query_row(
+            "SELECT value FROM index_metadata WHERE key = 'schema_version'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+
+    Ok(serde_json::json!({
+        "node_count":             node_count,
+        "edge_count":             edge_count,
+        "last_indexed":           last_indexed,
+        "last_index_duration_ms": duration_ms,
+        "schema_version":         schema_version.unwrap_or_else(|| "1".into()),
+        "last_indexed_relative":  last_indexed.as_deref().map(format_relative).unwrap_or("never".into()),
+    }))
+}
+
+fn format_relative(ts_str: &str) -> String {
+    let ts: u64 = ts_str.parse().unwrap_or(0);
+    let now = now_ms() as u64;
+    let secs = now.saturating_sub(ts) / 1000;
+    if secs < 60 {
+        format!("{}s ago", secs)
+    } else if secs < 3600 {
+        format!("{}m ago", secs / 60)
+    } else {
+        format!("{}h ago", secs / 3600)
+    }
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64
+}
