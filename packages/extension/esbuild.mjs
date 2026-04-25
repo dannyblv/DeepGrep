@@ -1,7 +1,7 @@
 import esbuild from 'esbuild';
 import { argv } from 'process';
 import { createRequire } from 'module';
-import { copyFileSync, mkdirSync } from 'fs';
+import { copyFileSync, mkdirSync, readdirSync } from 'fs';
 import { dirname, join } from 'path';
 
 const watch = argv.includes('--watch');
@@ -46,6 +46,16 @@ function copyAssets() {
   // web-tree-sitter resolves tree-sitter.wasm relative to the bundled file's dir (dist/)
   const webTreeSitterDir = dirname(req.resolve('web-tree-sitter'));
   copyFileSync(join(webTreeSitterDir, 'tree-sitter.wasm'), 'dist/tree-sitter.wasm');
+
+  // Copy language grammars from tree-sitter-wasms into grammars/ (gitignored, generated)
+  const wasmsSrc = join(dirname(req.resolve('tree-sitter-wasms/package.json')), 'out');
+  const grammarsDir = 'grammars';
+  mkdirSync(grammarsDir, { recursive: true });
+  for (const file of readdirSync(wasmsSrc)) {
+    if (file.endsWith('.wasm')) {
+      copyFileSync(join(wasmsSrc, file), join(grammarsDir, file));
+    }
+  }
 }
 
 if (watch) {

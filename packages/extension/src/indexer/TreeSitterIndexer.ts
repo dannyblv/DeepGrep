@@ -53,8 +53,8 @@ export class TreeSitterIndexer {
         const parser = new Parser();
         parser.setLanguage(language);
         this.parsers.set(lang, parser);
-      } catch {
-        // Grammar not available — skip silently
+      } catch (e) {
+        console.warn(`[TreeSitterIndexer] failed to load ${lang} grammar from ${wasmPath}: ${e instanceof Error ? e.message : e}`);
       }
     }
     this.initialized = true;
