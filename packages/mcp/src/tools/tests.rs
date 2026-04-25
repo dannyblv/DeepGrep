@@ -82,6 +82,45 @@ fn search_graph_served_is_zero_on_miss() {
         dispatch(&db, "search_graph", &json!({"query": "no_such_symbol"}), 4000).unwrap();
     assert_eq!(served, 0);
     assert!(text.contains("No nodes found"), "expected miss message, got: {}", text);
+    assert!(
+        text.contains("Coverage note"),
+        "miss message should include coverage caveat, got: {}",
+        text
+    );
+}
+
+#[test]
+fn search_graph_miss_includes_grep_suggestion() {
+    let db = fixture();
+    let (text, _) =
+        dispatch(&db, "search_graph", &json!({"query": "definitely_absent"}), 4000).unwrap();
+    assert!(text.contains("grep"), "miss message should recommend grep, got: {}", text);
+}
+
+#[test]
+fn stale_index_prepends_banner_to_search_results() {
+    // fixture sets last_indexed = '1000' (epoch ms 1970 ≈ now - decades) → always stale
+    let db = fixture();
+    let (text, _) = dispatch(&db, "search_graph", &json!({"query": "alpha"}), 4000).unwrap();
+    assert!(
+        text.contains("stale"),
+        "stale index should prepend warning banner, got: {}",
+        text
+    );
+}
+
+#[test]
+fn stale_index_banner_appears_in_context_tool() {
+    let db = fixture();
+    let (text, _) = dispatch(&db, "get_context_for_symbol", &json!({"symbol": "beta"}), 4000).unwrap();
+    assert!(text.contains("stale"), "context tool should show staleness banner, got: {}", text);
+}
+
+#[test]
+fn get_stats_shows_coverage_note() {
+    let db = fixture();
+    let (text, _) = dispatch(&db, "get_stats", &json!({}), 4000).unwrap();
+    assert!(text.contains("Coverage note"), "stats should include coverage note, got: {}", text);
 }
 
 #[test]

@@ -230,6 +230,15 @@ pub fn get_stats(conn: &Connection) -> Result<Value> {
         .optional()?
         .flatten();
 
+    let skipped_files: Option<String> = conn
+        .query_row(
+            "SELECT value FROM index_metadata WHERE key = 'skipped_files'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+
     Ok(serde_json::json!({
         "node_count":             node_count,
         "edge_count":             edge_count,
@@ -237,7 +246,33 @@ pub fn get_stats(conn: &Connection) -> Result<Value> {
         "last_index_duration_ms": duration_ms,
         "schema_version":         schema_version.unwrap_or_else(|| "1".into()),
         "last_indexed_relative":  last_indexed.as_deref().map(format_relative).unwrap_or("never".into()),
+        "skipped_files":          skipped_files.as_deref().unwrap_or("0"),
     }))
+}
+
+/// Returns a Markdown warning line if the index is more than 2 minutes stale.
+/// Prepend this to any tool output so users know to re-index before trusting results.
+pub fn staleness_banner(conn: &Connection) -> Option<String> {
+    let ts_str: String = conn
+        .query_row(
+            "SELECT value FROM index_metadata WHERE key = 'last_indexed'",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten()?;
+    let ts: u64 = ts_str.parse().ok()?;
+    let now = now_ms() as u64;
+    let secs = now.saturating_sub(ts) / 1000;
+    if secs <= 120 {
+        return None;
+    }
+    let (val, unit) = if secs < 3600 { (secs / 60, "m") } else { (secs / 3600, "h") };
+    Some(format!(
+        "> ⚠ Index is {}{}+ stale — edits since last index are invisible. Run **Re-index Workspace** for accurate results.\n\n",
+        val, unit
+    ))
 }
 
 fn format_relative(ts_str: &str) -> String {

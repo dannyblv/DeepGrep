@@ -47,11 +47,12 @@ fn resolve_phantom(
 
     let try_key = |fp: &str| lookup.get(&format!("{}:{}:{}", fp, kind, name)).cloned();
 
+    // 1. Exact file path and stripped-extension path
     if let Some(id) = try_key(phantom_file).or_else(|| try_key(&strip_ext(phantom_file))) {
         return Some(id);
     }
 
-    // @/ alias: try both src/ prefix and without
+    // 2. @/ alias: try both src/ prefix and without
     let alt = if phantom_file.starts_with("src/") {
         phantom_file[4..].to_string()
     } else {
@@ -61,7 +62,32 @@ fn resolve_phantom(
         return Some(id);
     }
 
-    // Barrel re-export map
+    // 3. Directory-import fallbacks: when the import path resolves to a directory
+    //    rather than a file (e.g. `import HomeHeader from './HomeHeader'`), also try:
+    //      dir/Name      → dir/Name.tsx  (Name.tsx file inside dir/)
+    //      dir/index     → dir/index.tsx (index file inside dir/)
+    //      dir/Name/Name → dir/Name/Name.tsx (common nested pattern)
+    let dir_candidates = [
+        format!("{}/{}", phantom_file, name),
+        format!("{}/index", phantom_file),
+        format!("{}/{}/{}", phantom_file, name, name),
+    ];
+    for candidate in &dir_candidates {
+        if let Some(id) = try_key(candidate).or_else(|| try_key(&strip_ext(candidate))) {
+            return Some(id);
+        }
+        // Also try src/ swap for each candidate
+        let c_alt = if candidate.starts_with("src/") {
+            candidate[4..].to_string()
+        } else {
+            format!("src/{}", candidate)
+        };
+        if let Some(id) = try_key(&c_alt).or_else(|| try_key(&strip_ext(&c_alt))) {
+            return Some(id);
+        }
+    }
+
+    // 4. Barrel re-export map
     let key = format!("{}:{}", strip_ext(phantom_file), name);
     if let Some([source_base, source_name]) = re_exports.get(&key) {
         if let Some(id) = lookup.get(&format!("{}:{}:{}", source_base, kind, source_name)) {
@@ -123,4 +149,80 @@ fn strip_ext(path: &str) -> String {
         }
     }
     path.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::{EdgeType, GraphEdge, GraphNode, NodeType};
+
+    fn make_fn_node(file: &str, name: &str, line: usize) -> GraphNode {
+        GraphNode {
+            id: format!("{}:function:{}:{}", file, name, line),
+            node_type: NodeType::Function,
+            name: name.to_string(),
+            file_path: file.to_string(),
+            start_line: line,
+            end_line: line + 10,
+            language: "typescript".to_string(),
+            code_snippet: String::new(),
+            node_hash: String::new(),
+            metadata: serde_json::json!({}),
+        }
+    }
+
+    fn phantom_edge(source: &str, phantom_target: &str) -> GraphEdge {
+        GraphEdge {
+            source_id: source.to_string(),
+            target_id: phantom_target.to_string(),
+            edge_type: EdgeType::Calls,
+        }
+    }
+
+    // ── Improvement B: directory-import resolution ────────────────────────────
+
+    #[test]
+    fn resolves_direct_file_phantom() {
+        let nodes = vec![make_fn_node("src/hooks/useAuth.ts", "useAuth", 5)];
+        let mut edges = vec![phantom_edge("src/a.ts:function:fn:1", "src/hooks/useAuth:function:useAuth:0")];
+        let resolved = resolve_phantoms(&nodes, &mut edges, &[]);
+        assert_eq!(resolved, 1);
+        assert_eq!(edges[0].target_id, "src/hooks/useAuth.ts:function:useAuth:5");
+    }
+
+    #[test]
+    fn resolves_directory_import_via_dir_slash_name() {
+        // import HomeHeader from './components/HomeHeader'
+        // actual file: src/components/HomeHeader/HomeHeader.tsx
+        let nodes = vec![make_fn_node("src/components/HomeHeader/HomeHeader.tsx", "HomeHeader", 3)];
+        let mut edges = vec![phantom_edge(
+            "src/Home.tsx:function:Home:0",
+            "src/components/HomeHeader:function:HomeHeader:0",
+        )];
+        let resolved = resolve_phantoms(&nodes, &mut edges, &[]);
+        assert_eq!(resolved, 1, "dir/Name fallback should resolve to dir/Name/Name.tsx");
+    }
+
+    #[test]
+    fn resolves_directory_import_via_index() {
+        // import Header from './components/Header'
+        // actual file: src/components/Header/index.tsx
+        let nodes = vec![make_fn_node("src/components/Header/index.tsx", "Header", 1)];
+        let mut edges = vec![phantom_edge(
+            "src/App.tsx:function:App:0",
+            "src/components/Header:function:Header:0",
+        )];
+        let resolved = resolve_phantoms(&nodes, &mut edges, &[]);
+        assert_eq!(resolved, 1, "dir/index fallback should resolve symbol in index.tsx");
+    }
+
+    #[test]
+    fn unresolvable_phantom_remains_unchanged() {
+        let nodes = vec![make_fn_node("src/a.ts", "knownFn", 1)];
+        let original_target = "src/ghost:function:missing:0".to_string();
+        let mut edges = vec![phantom_edge("src/a.ts:function:knownFn:1", &original_target)];
+        let resolved = resolve_phantoms(&nodes, &mut edges, &[]);
+        assert_eq!(resolved, 0);
+        assert_eq!(edges[0].target_id, original_target);
+    }
 }

@@ -19,16 +19,18 @@ pub fn run(db: &Db, args: &Value) -> Result<(String, usize)> {
         None
     };
 
+    let banner = queries::staleness_banner(&db.conn).unwrap_or_default();
+
     let start_id = match start_id {
         Some(id) => id,
-        None => return Ok(("Provide `symbol` or `file_path`.".into(), 0)),
+        None => return Ok((format!("{}Provide `symbol` or `file_path`.", banner), 0)),
     };
 
     let related_ids = queries::get_neighbourhood(&db.conn, &start_id, hops)?;
     let total = related_ids.len();
     let served = total.min(30) + 1;
 
-    let mut out = format!("## Related nodes ({} within {} hop(s))\n\n", total, hops);
+    let mut out = format!("{}## Related nodes ({} within {} hop(s))\n\n", banner, total, hops);
     for id in related_ids.iter().take(30) {
         if let Ok(Some(node)) = queries::get_node(&db.conn, id) {
             out.push_str(&format!(

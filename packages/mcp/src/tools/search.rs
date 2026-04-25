@@ -9,12 +9,21 @@ pub fn run(db: &Db, args: &Value) -> Result<(String, usize)> {
 
     let nodes = queries::search_nodes(&db.conn, query, limit)?;
 
+    let banner = queries::staleness_banner(&db.conn).unwrap_or_default();
+
     if nodes.is_empty() {
-        return Ok((format!("No nodes found matching \"{}\"", query), 0));
+        return Ok((format!(
+            "{}No nodes found matching \"{}\"\n\n\
+             **Coverage note**: the index tracks defined names — functions, classes, interfaces, \
+             and import specifiers. It does not cover string literals, comments, JSX prop values, \
+             or config keys. If you expected a match, confirm with grep before concluding the \
+             symbol doesn't exist.",
+            banner, query
+        ), 0));
     }
 
     let served = nodes.len();
-    let mut out = format!("Found {} node(s) matching \"{}\":\n\n", served, query);
+    let mut out = format!("{}Found {} node(s) matching \"{}\":\n\n", banner, served, query);
     for n in &nodes {
         out.push_str(&format!(
             "- **{}** `{}` ({}) {}:{}\n",

@@ -117,20 +117,22 @@ pub fn index_workspace(
     workspace: &Path,
     grammars: Arc<Grammars>,
 ) -> Result<IndexResult> {
-    let partial_results: Vec<IndexResult> = files
+    let partial_results: Vec<Option<IndexResult>> = files
         .par_iter()
-        .filter_map(|path| parse_file(path, workspace, &grammars))
+        .map(|path| parse_file(path, workspace, &grammars))
         .collect();
 
+    let skipped_files = partial_results.iter().filter(|r| r.is_none()).count();
     let mut merged = IndexResult::default();
-    for r in partial_results {
+    for r in partial_results.into_iter().flatten() {
         merged.nodes.extend(r.nodes);
         merged.edges.extend(r.edges);
         merged.re_exports.extend(r.re_exports);
     }
+    merged.skipped_files = skipped_files;
 
     let resolved = resolver::resolve_phantoms(&merged.nodes, &mut merged.edges, &merged.re_exports);
-    eprintln!("phantom edges resolved: {}", resolved);
+    eprintln!("phantom edges resolved: {}, skipped files: {}", resolved, skipped_files);
 
     Ok(merged)
 }

@@ -61,6 +61,8 @@ pub struct IndexResult {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
     pub re_exports: Vec<ReExport>,
+    /// Files skipped during indexing (too large, parse error, unsupported type).
+    pub skipped_files: usize,
 }
 
 pub fn node_id(rel_path: &str, kind: &str, name: &str, line: usize) -> String {

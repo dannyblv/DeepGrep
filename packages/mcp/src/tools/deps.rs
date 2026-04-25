@@ -15,9 +15,11 @@ pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<(String, usize)
         nodes.first()
     };
 
+    let banner = queries::staleness_banner(&db.conn).unwrap_or_default();
+
     let start = match start {
         Some(n) => n.clone(),
-        None => return Ok((format!("Symbol \"{}\" not found in index.", symbol), 0)),
+        None => return Ok((format!("{}Symbol \"{}\" not found in index.", banner, symbol), 0)),
     };
 
     let start_id = start["id"].as_str().unwrap_or("");
@@ -26,8 +28,8 @@ pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<(String, usize)
 
     let shown = dep_ids.len();
     let mut out = format!(
-        "## Dependency chain for `{}` ({} deps, cap {})\n\n",
-        symbol, shown, cap
+        "{}## Dependency chain for `{}` ({} deps, cap {})\n\n",
+        banner, symbol, shown, cap
     );
 
     for id in &dep_ids {

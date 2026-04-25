@@ -73,13 +73,15 @@ fn cmd_index(workspace: &PathBuf, db_path: &PathBuf) -> Result<()> {
     let duration = start.elapsed().as_millis();
     db.set_meta("last_indexed", &chrono_now())?;
     db.set_meta("last_index_duration_ms", &duration.to_string())?;
+    db.set_meta("skipped_files", &result.skipped_files.to_string())?;
 
     // Output JSON summary for the extension to read
     println!(
-        "{{\"nodes\":{},\"edges\":{},\"files\":{},\"duration_ms\":{}}}",
+        "{{\"nodes\":{},\"edges\":{},\"files\":{},\"skipped\":{},\"duration_ms\":{}}}",
         result.nodes.len(),
         result.edges.len(),
         total,
+        result.skipped_files,
         duration,
     );
     Ok(())

@@ -81,6 +81,7 @@ impl<'src> Extractor<'src> {
             "call_expression" => self.handle_call(node),
             "export_statement" => self.handle_export_stmt(node),
             "jsx_opening_element" | "jsx_self_closing_element" => self.handle_jsx(node),
+            "pair" => self.handle_pair(node),
             _ => {}
         }
     }
@@ -276,9 +277,33 @@ impl<'src> Extractor<'src> {
                                 .or(name_field)
                                 .map(|n| self.text(n).to_string())
                                 .unwrap_or_default();
-                            if !local.is_empty() {
-                                self.imported_names.insert(local, module.clone());
+                            if local.is_empty() {
+                                continue;
                             }
+                            self.imported_names.insert(local.clone(), module.clone());
+
+                            // Emit a per-symbol import node so FTS search by symbol
+                            // name finds all importers, even those using barrel imports
+                            // where the module path doesn't contain the symbol name.
+                            let sym_id = self.make_id("import", &local, node.start_position().row);
+                            let import_text = format!("import {{ {} }} from '{}'", local, module);
+                            self.nodes.push(GraphNode {
+                                id: sym_id.clone(),
+                                node_type: NodeType::Import,
+                                name: local.clone(),
+                                file_path: self.rel_path.clone(),
+                                start_line: node.start_position().row,
+                                end_line: node.end_position().row,
+                                language: self.lang.clone(),
+                                code_snippet: import_text,
+                                node_hash: String::new(),
+                                metadata: serde_json::json!({"module": module, "symbol_import": true}),
+                            });
+                            self.edges.push(GraphEdge {
+                                source_id: self.file_node_id.clone(),
+                                target_id: sym_id,
+                                edge_type: EdgeType::Imports,
+                            });
                         }
                     }
                     "namespace_import" => {
@@ -442,6 +467,45 @@ impl<'src> Extractor<'src> {
         }
     }
 
+    /// Index object-literal methods: `{ authenticate: () => {...} }`.
+    fn handle_pair(&mut self, node: Node) {
+        let key_node = match node.child_by_field_name("key") {
+            Some(n) if n.kind() == "property_identifier" => n,
+            _ => return,
+        };
+        let value_node = match node.child_by_field_name("value") {
+            Some(n) => n,
+            None => return,
+        };
+        if !matches!(value_node.kind(), "arrow_function" | "function" | "function_expression") {
+            return;
+        }
+        let name = self.text(key_node).to_string();
+        if name.is_empty() {
+            return;
+        }
+        let id = self.make_id("function", &name, node.start_position().row);
+        let snip = self.snippet(value_node, 500);
+        let hash = node_hash(&snip);
+        self.nodes.push(GraphNode {
+            id: id.clone(),
+            node_type: NodeType::Function,
+            name,
+            file_path: self.rel_path.clone(),
+            start_line: node.start_position().row,
+            end_line: node.end_position().row,
+            language: self.lang.clone(),
+            code_snippet: snip,
+            node_hash: hash,
+            metadata: serde_json::json!({"object_method": true}),
+        });
+        self.edges.push(GraphEdge {
+            source_id: self.file_node_id.clone(),
+            target_id: id,
+            edge_type: EdgeType::Exports,
+        });
+    }
+
     /// Walk parent chain to find the enclosing function/method/component.
     fn find_enclosing_fn(&self, node: Node) -> Option<String> {
         let mut current = node.parent();
@@ -477,19 +541,23 @@ impl<'src> Extractor<'src> {
         None
     }
 
-    fn resolve_import(&self, name: &str) -> Option<String> {
-        let module = self.imported_names.get(name)?;
-        let base = if module.starts_with('.') {
+    fn resolve_base(&self, module: &str) -> Option<String> {
+        if module.starts_with('.') {
             let dir = std::path::Path::new(&self.rel_path)
                 .parent()
                 .map(|p| p.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            normalize_path(&format!("{}/{}", dir, module))
+            Some(normalize_path(&format!("{}/{}", dir, module)))
         } else if let Some(rest) = module.strip_prefix("@/") {
-            format!("src/{}", rest)
+            Some(format!("src/{}", rest))
         } else {
-            return None;
-        };
+            None
+        }
+    }
+
+    fn resolve_import(&self, name: &str) -> Option<String> {
+        let module = self.imported_names.get(name)?;
+        let base = self.resolve_base(module)?;
         Some(format!("{}:function:{}:0", base, name))
     }
 
@@ -498,7 +566,108 @@ impl<'src> Extractor<'src> {
             nodes: self.nodes,
             edges: self.edges,
             re_exports: self.re_exports,
+            skipped_files: 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tree_sitter::{Language, Parser};
+
+    fn parse_ts(source: &str) -> IndexResult {
+        let lang: Language = tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into();
+        let mut parser = Parser::new();
+        parser.set_language(&lang).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        let mut ex = Extractor::new("src/test.ts".to_string(), source.as_bytes(), "typescript".to_string());
+        ex.walk(tree.root_node());
+        ex.finish()
+    }
+
+    fn parse_tsx(source: &str) -> IndexResult {
+        let lang: Language = tree_sitter_typescript::LANGUAGE_TSX.into();
+        let mut parser = Parser::new();
+        parser.set_language(&lang).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        let mut ex = Extractor::new("src/test.tsx".to_string(), source.as_bytes(), "tsx".to_string());
+        ex.walk(tree.root_node());
+        ex.finish()
+    }
+
+    // ── Improvement A: per-symbol import nodes ────────────────────────────────
+
+    #[test]
+    fn named_import_emits_per_symbol_node() {
+        let r = parse_ts("import { useOpenSignIn } from '../hooks';");
+        // One file node + one module-level import node + one per-symbol import node
+        let sym_node = r.nodes.iter().find(|n| {
+            matches!(n.node_type, NodeType::Import) && n.name == "useOpenSignIn"
+        });
+        assert!(sym_node.is_some(), "per-symbol import node missing for useOpenSignIn");
+    }
+
+    #[test]
+    fn barrel_import_per_symbol_node_has_symbol_name_not_path() {
+        let r = parse_ts("import { useOpenSignIn, useUser } from '../hooks';");
+        let names: Vec<&str> = r.nodes.iter()
+            .filter(|n| matches!(n.node_type, NodeType::Import) && n.metadata["symbol_import"] == true)
+            .map(|n| n.name.as_str())
+            .collect();
+        assert!(names.contains(&"useOpenSignIn"), "expected useOpenSignIn symbol node");
+        assert!(names.contains(&"useUser"), "expected useUser symbol node");
+    }
+
+    #[test]
+    fn default_import_does_not_emit_per_symbol_node() {
+        let r = parse_ts("import React from 'react';");
+        let sym_nodes: Vec<_> = r.nodes.iter()
+            .filter(|n| matches!(n.node_type, NodeType::Import) && n.metadata["symbol_import"] == true)
+            .collect();
+        assert!(sym_nodes.is_empty(), "default imports should not emit per-symbol nodes");
+    }
+
+    // ── Improvement C: object-method nodes ───────────────────────────────────
+
+    #[test]
+    fn object_pair_with_arrow_fn_emits_function_node() {
+        let r = parse_ts("const api = { authenticate: () => { return true; } };");
+        let node = r.nodes.iter().find(|n| {
+            matches!(n.node_type, NodeType::Function) && n.name == "authenticate"
+        });
+        assert!(node.is_some(), "object arrow method 'authenticate' should be indexed");
+        let node = node.unwrap();
+        assert_eq!(node.metadata["object_method"], true);
+    }
+
+    #[test]
+    fn object_pair_with_regular_fn_emits_function_node() {
+        let r = parse_ts("const api = { login: function() { return 1; } };");
+        let node = r.nodes.iter().find(|n| {
+            matches!(n.node_type, NodeType::Function) && n.name == "login"
+        });
+        assert!(node.is_some(), "object function method 'login' should be indexed");
+    }
+
+    #[test]
+    fn object_pair_with_non_fn_value_is_not_indexed() {
+        let r = parse_ts("const config = { timeout: 5000, url: 'http://example.com' };");
+        let has_fn = r.nodes.iter().any(|n| {
+            matches!(n.node_type, NodeType::Function)
+                && (n.name == "timeout" || n.name == "url")
+        });
+        assert!(!has_fn, "scalar object properties should not be indexed as functions");
+    }
+
+    #[test]
+    fn jsx_component_render_emits_calls_edge() {
+        let r = parse_tsx(
+            "import HomeHeader from './HomeHeader';\n\
+             const Home = () => <HomeHeader className='x' />;",
+        );
+        let calls = r.edges.iter().filter(|e| matches!(e.edge_type, EdgeType::Calls)).count();
+        assert!(calls > 0, "JSX render of <HomeHeader /> should emit a calls edge");
     }
 }
 

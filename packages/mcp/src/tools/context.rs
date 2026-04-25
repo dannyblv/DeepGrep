@@ -16,9 +16,11 @@ pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<(String, usize)
         nodes.first()
     };
 
+    let banner = queries::staleness_banner(&db.conn).unwrap_or_default();
+
     let node = match node {
         Some(n) => n.clone(),
-        None => return Ok((format!("Symbol \"{}\" not found in index.", symbol), 0)),
+        None => return Ok((format!("{}Symbol \"{}\" not found in index.", banner, symbol), 0)),
     };
 
     let id = node["id"].as_str().unwrap_or("");
@@ -33,7 +35,8 @@ pub fn run(db: &Db, args: &Value, token_budget: usize) -> Result<(String, usize)
     let capped_snippet = &snippet[..snippet.len().min(token_budget * 4)];
 
     let mut out = format!(
-        "## `{}` ({}) — {}:{}\n\n",
+        "{}## `{}` ({}) — {}:{}\n\n",
+        banner,
         node["name"].as_str().unwrap_or("?"),
         node["type"].as_str().unwrap_or("?"),
         node["file"].as_str().unwrap_or("?"),
