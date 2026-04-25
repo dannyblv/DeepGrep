@@ -1,0 +1,34 @@
+# Source / build inputs — not needed at runtime
+.git/**
+.github/**
+src/**
+__tests__/**
+*.map
+**/*.ts
+!**/*.d.ts
+tsconfig.json
+esbuild.mjs
+.eslintrc*
+.prettierrc*
+scripts/run-tests.mjs
+
+# Exclude all of node_modules by default, then re-include what's runtime-required.
+#
+# Runtime deps that are NOT bundled by esbuild (they are listed as `external`):
+#   - better-sqlite3  (native .node addon, must be pre-compiled for Electron)
+#   - web-tree-sitter (emscripten WASM loader, can't be bundled)
+#   - tree-sitter-wasms (grammar .wasm files)
+#   - @modelcontextprotocol/sdk, chokidar, express (required by mcp-server.js / extension)
+node_modules/**
+!node_modules/better-sqlite3/**
+!node_modules/web-tree-sitter/**
+!node_modules/tree-sitter-wasms/**
+!node_modules/@modelcontextprotocol/**
+!node_modules/chokidar/**
+!node_modules/express/**
+!node_modules/zod/**
+
+# Exclude test / build files inside allowed node_modules
+node_modules/**/test/**
+node_modules/**/__tests__/**
+node_modules/**/*.map
