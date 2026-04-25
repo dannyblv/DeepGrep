@@ -84,7 +84,11 @@ export class HookManager {
   }
 
   ensureClaudeMd(): void {
-    const claudeMdPath = resolve(this.workspaceRoot, 'CLAUDE.md');
+    if (!existsSync(this.claudeDir)) {
+      mkdirSync(this.claudeDir, { recursive: true });
+    }
+
+    const claudeMdPath = resolve(this.claudeDir, 'CLAUDE.md');
 
     if (!existsSync(claudeMdPath)) {
       writeFileSync(claudeMdPath, CLAUDE_MD_SECTION.trimStart(), 'utf8');

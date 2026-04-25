@@ -38,7 +38,7 @@ describe('HookManager', () => {
       const hm = makeHookManager(workspaceRoot);
       hm.ensureClaudeMd();
 
-      const claudeMdPath = join(workspaceRoot, 'CLAUDE.md');
+      const claudeMdPath = join(workspaceRoot, '.claude', 'CLAUDE.md');
       assert.ok(existsSync(claudeMdPath), 'CLAUDE.md should be created');
       const content = readFileSync(claudeMdPath, 'utf8');
       assert.ok(content.includes(MARKER), 'should contain the DeepGrep marker');
@@ -50,12 +50,14 @@ describe('HookManager', () => {
     it('does not start with blank lines when creating fresh file', () => {
       const hm = makeHookManager(workspaceRoot);
       hm.ensureClaudeMd();
-      const content = readFileSync(join(workspaceRoot, 'CLAUDE.md'), 'utf8');
+      const content = readFileSync(join(workspaceRoot, '.claude', 'CLAUDE.md'), 'utf8');
       assert.ok(!content.startsWith('\n'), 'file should not start with leading newline');
     });
 
     it('appends section to existing CLAUDE.md that lacks the marker', () => {
-      const claudeMdPath = join(workspaceRoot, 'CLAUDE.md');
+      const claudeDir = join(workspaceRoot, '.claude');
+      mkdirSync(claudeDir, { recursive: true });
+      const claudeMdPath = join(claudeDir, 'CLAUDE.md');
       writeFileSync(claudeMdPath, '# My Project\n\nExisting content here.\n', 'utf8');
 
       const hm = makeHookManager(workspaceRoot);
@@ -73,13 +75,15 @@ describe('HookManager', () => {
       hm.ensureClaudeMd();
       hm.ensureClaudeMd();
 
-      const content = readFileSync(join(workspaceRoot, 'CLAUDE.md'), 'utf8');
+      const content = readFileSync(join(workspaceRoot, '.claude', 'CLAUDE.md'), 'utf8');
       const markerCount = (content.match(new RegExp(MARKER, 'g')) ?? []).length;
       assert.equal(markerCount, 1, 'marker should appear exactly once');
     });
 
     it('skips existing CLAUDE.md that already contains the marker', () => {
-      const claudeMdPath = join(workspaceRoot, 'CLAUDE.md');
+      const claudeDir = join(workspaceRoot, '.claude');
+      mkdirSync(claudeDir, { recursive: true });
+      const claudeMdPath = join(claudeDir, 'CLAUDE.md');
       const alreadyInjected = `# My Project\n\n${MARKER} is already here\n`;
       writeFileSync(claudeMdPath, alreadyInjected, 'utf8');
 
@@ -212,11 +216,11 @@ describe('HookManager', () => {
       hm.ensureHooks();
       hm.ensureAgentMemoryDirs(['indexer']);
 
-      assert.ok(existsSync(join(workspaceRoot, 'CLAUDE.md')));
+      assert.ok(existsSync(join(workspaceRoot, '.claude', 'CLAUDE.md')));
       assert.ok(existsSync(join(workspaceRoot, '.claude', 'settings.json')));
       assert.ok(existsSync(join(workspaceRoot, '.claude', 'agent-memory', 'indexer')));
 
-      const claude = readFileSync(join(workspaceRoot, 'CLAUDE.md'), 'utf8');
+      const claude = readFileSync(join(workspaceRoot, '.claude', 'CLAUDE.md'), 'utf8');
       assert.ok(claude.includes(MARKER));
       const settings = JSON.parse(
         readFileSync(join(workspaceRoot, '.claude', 'settings.json'), 'utf8'),
