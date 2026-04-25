@@ -1,7 +1,7 @@
 {
   "name": "deepgrep-root",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "scripts": {
     "setup":           "pnpm install && node scripts/rebuild-native.mjs && pnpm build:rust && pnpm build",
     "build":           "pnpm -r build",

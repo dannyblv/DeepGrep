@@ -13,28 +13,42 @@ on:
 permissions:
   contents: write
 
+# ── Shared tag logic ──────────────────────────────────────────────────────────
+#  Both build jobs and the release job need the same tag value.
+#  We compute it once in a tiny pre-job and pass it via outputs.
 jobs:
-  build-and-release:
-    runs-on: mac
 
+  # ── 0. Resolve release tag ──────────────────────────────────────────────────
+  resolve-tag:
+    runs-on: mac
+    outputs:
+      value: ${{ steps.tag.outputs.value }}
     steps:
-      # ── 1. Checkout ───────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${{ github.event.inputs.tag }}" ]]; then
+            echo "value=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            echo "value=dev-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── 1. Rust build (parallel) ────────────────────────────────────────────────
+  build-rust:
+    runs-on: mac
+    needs: resolve-tag
+    steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      # ── 2. Toolchain setup ────────────────────────────────────────────────────
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
 
       - name: Setup Rust (stable)
         uses: dtolnay/rust-toolchain@stable
@@ -50,43 +64,63 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      # ── 3. Install JS dependencies ────────────────────────────────────────────
-      - name: Install Node dependencies
-        run: pnpm install --frozen-lockfile
-
-      # ── 4. Rust build ─────────────────────────────────────────────────────────
       - name: Build Rust crates (release)
         run: cargo build --release
 
-      # ── 5. Detect VS Code Electron version ────────────────────────────────────
+      - name: Stage Rust binary
+        run: |
+          mkdir -p dist-release
+          if [ -f target/release/deepgrep ]; then
+            cp target/release/deepgrep dist-release/deepgrep-indexer-macos
+          else
+            echo "WARNING: target/release/deepgrep not found — skipping binary"
+          fi
+
+      - name: Upload Rust binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-binary
+          path: dist-release/deepgrep-indexer-macos
+          if-no-files-found: warn
+
+  # ── 2. JS / Extension build (parallel) ─────────────────────────────────────
+  build-js:
+    runs-on: mac
+    needs: resolve-tag
+    outputs:
+      electron_version: ${{ steps.electron.outputs.version }}
+      vscode_tag:       ${{ steps.electron.outputs.vscode_tag }}
+      vsix_name:        ${{ steps.vsix.outputs.name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Detect VS Code Electron version ──────────────────────────────────────
       #
-      #  better-sqlite3 is a native addon that must be compiled against the exact
-      #  Electron ABI that ships inside VS Code.  We query the VS Code update API
-      #  to resolve the current stable tag, then read electronVersion from the
-      #  VS Code source tree at that tag — no hard-coded version needed.
+      #  better-sqlite3 must be compiled against the exact Electron ABI that
+      #  ships inside VS Code.  We query the VS Code update API to find the
+      #  current stable tag, then read electronVersion from that tag's package.json.
       #
       - name: Detect VS Code Electron version
         id: electron
-        run: |
-          set -euo pipefail
+        run: python3 .github/scripts/detect_electron.py
 
-          # Latest stable VS Code commit tag (e.g. "1.99.1")
-          VSCODE_TAG=$(curl -fsSL \
-            "https://update.code.visualstudio.com/api/releases/stable" \
-            | python3 -c "import sys,json; print(json.load(sys.stdin)[0])")
-
-          echo "VS Code tag: $VSCODE_TAG"
-
-          # Electron version stored in VS Code's root package.json
-          ELECTRON_VERSION=$(curl -fsSL \
-            "https://raw.githubusercontent.com/microsoft/vscode/${VSCODE_TAG}/package.json" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('electronVersion') or d.get('electron'))")
-
-          echo "Electron version: $ELECTRON_VERSION"
-          echo "version=$ELECTRON_VERSION" >> "$GITHUB_OUTPUT"
-          echo "vscode_tag=$VSCODE_TAG"    >> "$GITHUB_OUTPUT"
-
-      # ── 6. Rebuild better-sqlite3 for VS Code's Electron ─────────────────────
       - name: Rebuild better-sqlite3 for Electron ${{ steps.electron.outputs.version }}
         working-directory: packages/extension
         env:
@@ -96,11 +130,9 @@ jobs:
             -v "$ELECTRON_VERSION" \
             -w better-sqlite3
 
-      # ── 7. Full JS/TS build ───────────────────────────────────────────────────
       - name: Build all packages (extension + webview + mcp-server)
         run: pnpm build
 
-      # ── 8. Package VSIX ───────────────────────────────────────────────────────
       - name: Package .vsix
         working-directory: packages/extension
         run: pnpm package
@@ -110,73 +142,64 @@ jobs:
         run: |
           VSIX_PATH=$(ls packages/extension/*.vsix | head -1)
           VSIX_NAME=$(basename "$VSIX_PATH")
-          echo "path=$VSIX_PATH"   >> "$GITHUB_OUTPUT"
-          echo "name=$VSIX_NAME"   >> "$GITHUB_OUTPUT"
+          echo "path=$VSIX_PATH" >> "$GITHUB_OUTPUT"
+          echo "name=$VSIX_NAME" >> "$GITHUB_OUTPUT"
           echo "Packaged: $VSIX_NAME ($(du -sh $VSIX_PATH | cut -f1))"
 
-      # ── 9. Collect extra release assets ──────────────────────────────────────
-      #
-      #  Include the compiled Rust binary and the standalone MCP-server bundle
-      #  so users can run the MCP server without the extension if they prefer.
-      #
-      - name: Collect release assets
-        run: |
-          mkdir -p dist-release
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: ${{ steps.vsix.outputs.path }}
 
-          # Rust binary (deepgrep-indexer if it exists)
-          if [ -f target/release/deepgrep ]; then
-            cp target/release/deepgrep dist-release/deepgrep-indexer-macos
-          fi
+      - name: Upload MCP server bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-server
+          path: packages/extension/dist/mcp-server.js
+          if-no-files-found: warn
 
-          # Standalone MCP-server bundle from the extension dist
-          if [ -f packages/extension/dist/mcp-server.js ]; then
-            cp packages/extension/dist/mcp-server.js dist-release/mcp-server.js
-          fi
+  # ── 3. Create GitHub Release (after both builds) ────────────────────────────
+  release:
+    runs-on: mac
+    needs: [resolve-tag, build-rust, build-js]
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-release
 
-          ls -lh dist-release/
+      - name: List artifacts
+        run: ls -lhR dist-release/
 
-      # ── 10. Determine release tag ─────────────────────────────────────────────
-      - name: Determine release tag
-        id: tag
-        run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
-            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
-          elif [[ -n "${{ github.event.inputs.tag }}" ]]; then
-            echo "value=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            SHORT_SHA=$(git rev-parse --short HEAD)
-            echo "value=dev-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          fi
-
-      # ── 11. Create GitHub Release ─────────────────────────────────────────────
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.value }}
-          name: DeepGrep ${{ steps.tag.outputs.value }}
+          tag_name: ${{ needs.resolve-tag.outputs.value }}
+          name: DeepGrep ${{ needs.resolve-tag.outputs.value }}
           draft: false
           prerelease: ${{ !startsWith(github.ref_name, 'v') }}
           generate_release_notes: true
           body: |
-            ## DeepGrep ${{ steps.tag.outputs.value }}
+            ## DeepGrep ${{ needs.resolve-tag.outputs.value }}
 
-            Built against **VS Code ${{ steps.electron.outputs.vscode_tag }}** / Electron **${{ steps.electron.outputs.version }}** on macOS.
+            Built against **VS Code ${{ needs.build-js.outputs.vscode_tag }}** / Electron **${{ needs.build-js.outputs.electron_version }}** on macOS.
 
             ### Installation
-            1. Download `${{ steps.vsix.outputs.name }}` below.
+            1. Download `${{ needs.build-js.outputs.vsix_name }}` below.
             2. In VS Code: **Extensions** → `···` → **Install from VSIX…** → select the file.
             3. Reload VS Code.
 
             ### Files in this release
             | File | Description |
             |------|-------------|
-            | `${{ steps.vsix.outputs.name }}` | VS Code extension (install this) |
+            | `${{ needs.build-js.outputs.vsix_name }}` | VS Code extension (install this) |
             | `mcp-server.js` | Standalone MCP stdio server (optional) |
             | `deepgrep-indexer-macos` | Native Rust indexer binary (optional) |
 
-            > **Note:** `better-sqlite3` inside the `.vsix` is pre-compiled for Electron ${{ steps.electron.outputs.version }}.
+            > **Note:** `better-sqlite3` inside the `.vsix` is pre-compiled for Electron ${{ needs.build-js.outputs.electron_version }}.
             > If VS Code upgrades its Electron version, rebuild from source or wait for the next release.
           files: |
-            ${{ steps.vsix.outputs.path }}
-            dist-release/mcp-server.js
-            dist-release/deepgrep-indexer-macos
+            dist-release/vsix/${{ needs.build-js.outputs.vsix_name }}
+            dist-release/mcp-server/mcp-server.js
+            dist-release/rust-binary/deepgrep-indexer-macos
