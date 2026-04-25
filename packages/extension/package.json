@@ -128,7 +128,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:only": "mocha",
     "test:watch": "mocha --watch",
-    "package": "vsce package",
+    "package": "vsce package --no-dependencies",
     "rebuild-native": "node ../../scripts/rebuild-native.mjs",
     "clean": "rimraf dist out"
   },
