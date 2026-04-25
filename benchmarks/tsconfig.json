@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "sourceMap": true,
+    "baseUrl": "..",
+    "paths": {
+      "../packages/extension/src/*": ["packages/extension/src/*"],
+      "../packages/mcp-server/src/*": ["packages/mcp-server/src/*"]
+    }
+  },
+  "include": ["./**/*.ts", "../packages/extension/src/**/*.ts", "../packages/mcp-server/src/**/*.ts"],
+  "exclude": ["../node_modules", "../packages/extension/dist", "../packages/extension/out"]
+}

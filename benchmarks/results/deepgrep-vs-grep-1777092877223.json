@@ -1,0 +1,214 @@
+{
+  "name": "DeepGrep vs grep/find",
+  "description": "Compares structured AST-graph queries (DeepGrep) against raw grep/find on the DeepGrep source tree.",
+  "run_at": "2026-04-25T04:54:37.222Z",
+  "index_time_ms": 90,
+  "node_count": 201,
+  "edge_count": 170,
+  "queries": [
+    {
+      "label": "Symbol search: searchNodes",
+      "deepgrep": {
+        "query": "searchNodes",
+        "latency_ms": 0,
+        "result_count": 0,
+        "raw_chars": 2,
+        "token_estimate": 1,
+        "structured": true,
+        "hits": []
+      },
+      "baseline": {
+        "query": "searchNodes",
+        "latency_ms": 9,
+        "result_count": 11,
+        "raw_chars": 1657,
+        "token_estimate": 415,
+        "structured": false,
+        "hits": [
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/__tests__/GraphDatabase.test.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/db/GraphDatabase.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/mcp-server/src/index.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/mcp-server/src/db.ts"
+        ]
+      },
+      "winner": "deepgrep",
+      "winner_reason": "100% fewer tokens, 9ms faster, structured output"
+    },
+    {
+      "label": "Callers + callees: indexFile",
+      "deepgrep": {
+        "query": "indexFile",
+        "latency_ms": 0,
+        "result_count": 0,
+        "raw_chars": 52,
+        "token_estimate": 13,
+        "structured": true,
+        "hits": []
+      },
+      "baseline": {
+        "query": "indexFile",
+        "latency_ms": 7,
+        "result_count": 34,
+        "raw_chars": 5757,
+        "token_estimate": 1440,
+        "structured": false,
+        "hits": [
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/extension.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/__tests__/TreeSitterIndexer.test.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/indexer/TreeSitterIndexer.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/indexer/RustIndexer.ts"
+        ]
+      },
+      "winner": "deepgrep",
+      "winner_reason": "99% fewer tokens, 7ms faster, structured output"
+    },
+    {
+      "label": "Dependency chain: GraphDatabase",
+      "deepgrep": {
+        "query": "GraphDatabase",
+        "latency_ms": 0,
+        "result_count": 0,
+        "raw_chars": 33,
+        "token_estimate": 9,
+        "structured": true,
+        "hits": []
+      },
+      "baseline": {
+        "query": "GraphDatabase",
+        "latency_ms": 6,
+        "result_count": 22,
+        "raw_chars": 3090,
+        "token_estimate": 773,
+        "structured": false,
+        "hits": [
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/extension.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/webview/GraphPanel.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/webview/SidebarProvider.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/terminal/ShellIntegration.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/mcp/McpServerProvider.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/__tests__/GraphDatabase.test.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/db/GraphDatabase.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/indexer/TreeSitterIndexer.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/mcp-server/src/index.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/mcp-server/src/db.ts"
+        ]
+      },
+      "winner": "deepgrep",
+      "winner_reason": "99% fewer tokens, 6ms faster, structured output"
+    },
+    {
+      "label": "Related nodes: McpServerProvider",
+      "deepgrep": {
+        "query": "related(packages/extension/src/mcp/McpServerProvider.ts, hops=2)",
+        "latency_ms": 1,
+        "result_count": 14,
+        "raw_chars": 7645,
+        "token_estimate": 1912,
+        "structured": true,
+        "hits": [
+          "McpServerProvider @ packages/extension/src/mcp/McpServerProvider.ts",
+          "constructor @ packages/extension/src/mcp/McpServerProvider.ts",
+          "dispose @ packages/extension/src/mcp/McpServerProvider.ts",
+          "legacyScriptPath @ packages/extension/src/mcp/McpServerProvider.ts",
+          "mcpBinaryPath @ packages/extension/src/mcp/McpServerProvider.ts",
+          "registerWithVSCode @ packages/extension/src/mcp/McpServerProvider.ts",
+          "serverCommand @ packages/extension/src/mcp/McpServerProvider.ts",
+          "serverEnv @ packages/extension/src/mcp/McpServerProvider.ts",
+          "start @ packages/extension/src/mcp/McpServerProvider.ts",
+          "writeMcpJson @ packages/extension/src/mcp/McpServerProvider.ts",
+          "../db/GraphDatabase @ packages/extension/src/mcp/McpServerProvider.ts",
+          "fs @ packages/extension/src/mcp/McpServerProvider.ts",
+          "path @ packages/extension/src/mcp/McpServerProvider.ts",
+          "vscode @ packages/extension/src/mcp/McpServerProvider.ts"
+        ]
+      },
+      "baseline": {
+        "query": "McpServerProvider",
+        "latency_ms": 6,
+        "result_count": 3,
+        "raw_chars": 465,
+        "token_estimate": 117,
+        "structured": false,
+        "hits": [
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/extension.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/mcp/McpServerProvider.ts"
+        ]
+      },
+      "winner": "baseline",
+      "winner_reason": "94% fewer tokens"
+    },
+    {
+      "label": "Fuzzy search: signal",
+      "deepgrep": {
+        "query": "signal",
+        "latency_ms": 0,
+        "result_count": 0,
+        "raw_chars": 2,
+        "token_estimate": 1,
+        "structured": true,
+        "hits": []
+      },
+      "baseline": {
+        "query": "\\bsignal\\w*",
+        "latency_ms": 8,
+        "result_count": 11,
+        "raw_chars": 1478,
+        "token_estimate": 370,
+        "structured": false,
+        "hits": [
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/mcp-server/src/index.ts"
+        ]
+      },
+      "winner": "deepgrep",
+      "winner_reason": "100% fewer tokens, 8ms faster, structured output"
+    },
+    {
+      "label": "File discovery: *.ts files",
+      "deepgrep": {
+        "query": "file nodes",
+        "latency_ms": 0,
+        "result_count": 0,
+        "raw_chars": 2,
+        "token_estimate": 1,
+        "structured": true,
+        "hits": []
+      },
+      "baseline": {
+        "query": "*.ts",
+        "latency_ms": 8,
+        "result_count": 16,
+        "raw_chars": 1488,
+        "token_estimate": 372,
+        "structured": false,
+        "hits": [
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/extension.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/webview/GraphPanel.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/webview/messages.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/webview/SidebarProvider.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/webview/HowToUsePanel.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/terminal/ShellIntegration.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/mcp/McpServerProvider.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/__tests__/TreeSitterIndexer.test.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/__tests__/fixtures/sample.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/__tests__/GraphDatabase.test.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/hooks/HookManager.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/db/GraphDatabase.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/indexer/TreeSitterIndexer.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/extension/src/indexer/RustIndexer.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/mcp-server/src/index.ts",
+          "/Users/danny.braunstein/Desktop/Danny/DeepGrep/packages/mcp-server/src/db.ts"
+        ]
+      },
+      "winner": "deepgrep",
+      "winner_reason": "100% fewer tokens, 8ms faster, structured output"
+    }
+  ],
+  "summary": {
+    "deepgrep_avg_latency_ms": 0.16666666666666666,
+    "baseline_avg_latency_ms": 7.333333333333333,
+    "deepgrep_avg_tokens": 322.8333333333333,
+    "baseline_avg_tokens": 581.1666666666666,
+    "deepgrep_wins": 5,
+    "baseline_wins": 1
+  }
+}
