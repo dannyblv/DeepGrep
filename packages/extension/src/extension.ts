@@ -39,51 +39,86 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   log('DeepGrep activating…');
   log(`Workspace: ${workspaceRoot}`);
   log(`Extension path: ${extensionPath}`);
+  log(`Node.js version: ${process.version}`);
+  log(`Electron version: ${process.versions.electron ?? 'n/a'}`);
+  log(`Platform: ${process.platform} ${process.arch}`);
+  log(`NODE_MODULE_VERSION (ABI): ${process.versions.modules}`);
 
   // ── Database ───────────────────────────────────────────────────────────────
   const dbPath = resolve(workspaceRoot, '.deepgrep', 'graph.db');
   log(`DB path: ${dbPath}`);
-  db = new GraphDatabase(dbPath);
+  try {
+    db = new GraphDatabase(dbPath);
+    log('GraphDatabase initialised OK');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    log(`ERROR: GraphDatabase failed to initialise: ${msg}`);
+    if (err instanceof Error && err.stack) log(err.stack);
+    // Register the sidebar anyway so VS Code doesn't show an infinite spinner
+    // (sidebar will display the error instead)
+  }
 
   // ── Status bar ─────────────────────────────────────────────────────────────
+  log('Creating status bar…');
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
   statusBar.command = 'deepgrep.showLogs';
   statusBar.tooltip = 'DeepGrep — click to view logs';
   statusBar.text = '$(database) DeepGrep';
   statusBar.show();
   context.subscriptions.push(statusBar);
+  log('Status bar created');
 
   // ── Claude Code hooks ──────────────────────────────────────────────────────
-  const hookManager = new HookManager(workspaceRoot, context.extensionPath);
-  hookManager.ensureHooks();
-  hookManager.ensureClaudeMd();
-  hookManager.ensureAgentMemoryDirs(['indexer', 'graph-analyst', 'ui']);
+  log('Installing Claude Code hooks…');
+  try {
+    const hookManager = new HookManager(workspaceRoot, context.extensionPath);
+    hookManager.ensureHooks();
+    hookManager.ensureClaudeMd();
+    hookManager.ensureAgentMemoryDirs(['indexer', 'graph-analyst', 'ui']);
+    log('Hooks installed OK');
+  } catch (err) {
+    log(`WARNING: HookManager failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
   // ── Graph panel (webview) ──────────────────────────────────────────────────
-  graphPanel = new GraphPanel(context, db);
-  context.subscriptions.push(graphPanel);
+  log('Creating GraphPanel…');
+  if (db) {
+    graphPanel = new GraphPanel(context, db);
+    context.subscriptions.push(graphPanel);
+    log('GraphPanel created');
+  } else {
+    log('WARNING: GraphPanel skipped — DB not available');
+  }
 
   // ── Sidebar panel ──────────────────────────────────────────────────────────
+  log('Registering SidebarProvider…');
   sidebar = new SidebarProvider(context.extensionUri, workspaceRoot, db);
+  if (out) sidebar.setOutputChannel(out);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(SidebarProvider.VIEW_TYPE, sidebar),
   );
+  log('SidebarProvider registered');
 
   // ── Terminal shell integration ─────────────────────────────────────────────
-  const shellInt = new ShellIntegration(db, (failingNodeIds) => {
-    graphPanel?.show();
-    graphPanel?.highlightNodes(failingNodeIds, 'error');
-    vscode.window.showWarningMessage(
-      `DeepGrep: ${failingNodeIds.length} failing node(s) highlighted in graph`,
-    );
-  });
-  shellInt.start();
-  context.subscriptions.push(shellInt);
+  if (db) {
+    const shellInt = new ShellIntegration(db, (failingNodeIds) => {
+      graphPanel?.show();
+      graphPanel?.highlightNodes(failingNodeIds, 'error');
+      vscode.window.showWarningMessage(
+        `DeepGrep: ${failingNodeIds.length} failing node(s) highlighted in graph`,
+      );
+    });
+    shellInt.start();
+    context.subscriptions.push(shellInt);
+    log('ShellIntegration started');
+  }
 
   // ── MCP server ─────────────────────────────────────────────────────────────
+  log('Starting MCP server…');
   const mcpProvider = new McpServerProvider(context, db, workspaceRoot);
   await mcpProvider.start();
   context.subscriptions.push(mcpProvider);
+  log('MCP server started');
 
   // ── MCP activity watcher: animates webview ⬡ and status bar on each tool call
   const activityPath = resolve(workspaceRoot, '.deepgrep', 'mcp-activity.json');
@@ -197,6 +232,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(queueWatcher);
 
   // ── Initial state ──────────────────────────────────────────────────────────
+  log('Reading initial DB stats…');
+  if (!db) {
+    log('ERROR: DB is null — extension is degraded. Check logs above for the cause.');
+    setStatus('$(warning) DeepGrep: DB error — click for logs', 'DeepGrep — click to view logs');
+    vscode.window.showErrorMessage('DeepGrep: database failed to load. Click "View Logs" to diagnose.', 'View Logs')
+      .then(v => { if (v === 'View Logs') out?.show(true); });
+    log('DeepGrep activated in DEGRADED mode (no DB)');
+    return;
+  }
   const stats = db.getStats();
   log(`DB stats on activate: ${stats.node_count} nodes, ${stats.edge_count} edges`);
   if (stats.node_count === 0) {

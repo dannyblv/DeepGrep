@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { resolve } from 'path';
 import { existsSync, writeFileSync } from 'fs';
-import type { GraphDatabase } from '../db/GraphDatabase';
+import type { GraphDatabase } from '../db/GraphDatabase'; // eslint-disable-line @typescript-eslint/no-unused-vars
 
 /** Path to compiled Rust MCP server binary. */
 function mcpBinaryPath(extensionPath: string): string {
@@ -20,7 +20,7 @@ export class McpServerProvider implements vscode.Disposable {
 
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly db: GraphDatabase,
+    private readonly db: GraphDatabase | null,
     private readonly workspaceRoot: string,
   ) {}
 

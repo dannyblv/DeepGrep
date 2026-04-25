@@ -5,18 +5,29 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   static readonly VIEW_TYPE = 'deepgrep.sidebar';
 
   private _view?: vscode.WebviewView;
+  private _out: vscode.OutputChannel | null = null;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _workspaceRoot: string,
-    private readonly _db: GraphDatabase,
+    private readonly _db: GraphDatabase | null,
   ) {}
+
+  setOutputChannel(channel: vscode.OutputChannel): void {
+    this._out = channel;
+  }
+
+  private _log(msg: string): void {
+    const ts = new Date().toISOString().replace('T', ' ').slice(0, 23);
+    this._out?.appendLine(`[${ts}] [sidebar] ${msg}`);
+  }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
     _ctx: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
   ): void {
+    this._log('resolveWebviewView called');
     this._view = webviewView;
     webviewView.webview.options = {
       enableScripts: true,
@@ -26,20 +37,40 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
       ],
     };
     webviewView.webview.html = this._html(webviewView.webview);
+    this._log('Webview HTML set');
     webviewView.webview.onDidReceiveMessage(msg => {
-      if (msg.type === 'ready') this.refresh();
-      else if (msg.type === 'openGraph') vscode.commands.executeCommand('deepgrep.openGraph');
-      else if (msg.type === 'reindex') vscode.commands.executeCommand('deepgrep.reindexWorkspace');
-      else if (msg.type === 'howToUse') vscode.commands.executeCommand('deepgrep.showOnboarding');
+      this._log(`Message from webview: ${msg.type}`);
+      if (msg.type === 'ready') {
+        this._log('Webview ready — posting stats');
+        this.refresh();
+      } else if (msg.type === 'openGraph') {
+        vscode.commands.executeCommand('deepgrep.openGraph');
+      } else if (msg.type === 'reindex') {
+        vscode.commands.executeCommand('deepgrep.reindexWorkspace');
+      } else if (msg.type === 'howToUse') {
+        vscode.commands.executeCommand('deepgrep.showOnboarding');
+      }
     });
   }
 
   refresh(): void {
-    if (!this._view) return;
+    if (!this._view) {
+      this._log('refresh() called but no view yet — skipping');
+      return;
+    }
+    if (!this._db) {
+      this._log('refresh() called but DB is null — posting error state');
+      this._view.webview.postMessage({ type: 'dbError', message: 'Database failed to load. Open the DeepGrep output channel for details.' });
+      return;
+    }
     try {
-      this._view.webview.postMessage({ type: 'stats', data: this._db.getStats() });
-    } catch {
-      // DB not ready yet
+      const stats = this._db.getStats();
+      this._log(`refresh() posting stats: nodes=${stats.node_count}, edges=${stats.edge_count}`);
+      this._view.webview.postMessage({ type: 'stats', data: stats });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this._log(`refresh() getStats() threw: ${msg}`);
+      this._view.webview.postMessage({ type: 'dbError', message: `DB error: ${msg}` });
     }
   }
 
@@ -48,6 +79,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   }
 
   setIndexing(active: boolean, message = ''): void {
+    this._log(`setIndexing(${active}, "${message}")`);
     this._isIndexing = active;
     this._view?.webview.postMessage({ type: 'indexing', indexing: active, message });
     vscode.commands.executeCommand('setContext', 'deepgrep.isIndexing', active);
@@ -318,6 +350,14 @@ function ago(ts){
 }
 
 window.addEventListener('message',({data:d})=>{
+  if(d.type==='dbError'){
+    dot.className='dot red';
+    stMain.textContent='DB error — check DeepGrep logs';
+    stSub.textContent=d.message||'';
+    onboard.className='onboard';
+    main.className='main';
+    return;
+  }
   if(d.type==='stats'&&d.data){
     const s=d.data;
     const has=s.node_count>0;

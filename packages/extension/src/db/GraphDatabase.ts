@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 
@@ -95,7 +95,11 @@ export class GraphDatabase {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
-    this.db = new Database(dbPath);
+    // Lazy-load so a native-ABI mismatch throws here (inside activate's try/catch)
+    // rather than at module load time (which would crash the extension before activate() runs).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const SqliteDB = require('better-sqlite3') as typeof Database;
+    this.db = new SqliteDB(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.db.pragma('cache_size = -32000'); // 32 MB page cache

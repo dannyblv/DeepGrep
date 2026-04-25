@@ -1,46 +1,61 @@
-# Dependencies
+# ── Dependencies ────────────────────────────────────────────────────────────
 node_modules/
 
-# Build outputs
+# ── Build outputs ────────────────────────────────────────────────────────────
 dist/
 out/
 *.vsix
 
-# Rust build artifacts
+# Bundled runtime deps written by scripts/resolve-symlinks.mjs — generated, not source
+packages/extension/dist/node_modules/
+
+# ── Rust ─────────────────────────────────────────────────────────────────────
 target/
 
-# Tree-sitter WASM grammars (downloaded at build time via tree-sitter-wasms)
-packages/extension/grammars/
+# Compiled Rust binaries copied into the extension by scripts/copy-binaries.mjs
+packages/extension/bin/
 
-# Native addons (rebuilt per Electron version)
+# Native addon build artifacts (rebuilt per Electron version via pnpm rebuild-native)
 *.node
 build/Release/
 
-# TypeScript incremental build cache
+# ── TypeScript ───────────────────────────────────────────────────────────────
 *.tsbuildinfo
 
-# Runtime data (.gitkeep preserved to track the directory)
-.deepgrep/*
-!.deepgrep/.gitkeep
+# ── Runtime / generated data ─────────────────────────────────────────────────
+.deepgrep/
 
-# Source maps
-*.js.map
+# ── Tree-sitter grammars (copied from tree-sitter-wasms at build time) ───────
+packages/extension/grammars/
 
-# MCP local discovery config
+# ── MCP local discovery config (written per-workspace by the extension) ──────
 .mcp.json
 
-# VS Code user-specific (launch.json is committed for dev setup)
-.vscode/settings.json
+# Claude Code hooks / agent memory written per-workspace by HookManager
+.claude/settings.json
+.claude/agent-memory/
 
-# Logs
+# ── Source maps ──────────────────────────────────────────────────────────────
+*.js.map
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
 *.log
 pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Environment
+# ── Environment ──────────────────────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
 
-# OS
+# ── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── Editor ───────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
