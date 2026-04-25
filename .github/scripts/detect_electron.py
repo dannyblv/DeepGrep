@@ -22,7 +22,12 @@ def fetch_json(url):
 
 
 def electron_from_pkg(pkg):
-    return pkg.get("electronVersion") or pkg.get("electron") or ""
+    return (
+        pkg.get("electronVersion")
+        or pkg.get("electron")
+        or pkg.get("devDependencies", {}).get("electron", "").lstrip("^~>=")
+        or ""
+    )
 
 
 # ── 1. Resolve latest stable VS Code tag ──────────────────────────────────────
@@ -60,6 +65,16 @@ if not SEMVER_RE.match(electron_version):
         vscode_tag = local_pkg.get("version", "unknown")
     except Exception as exc:
         print(f"WARNING: could not read local VS Code: {exc}", file=sys.stderr)
+
+# ── 3b. Fallback: VS Code release metadata endpoint ──────────────────────────
+if not SEMVER_RE.match(electron_version) and vscode_tag:
+    try:
+        rel_data = fetch_json(
+            f"https://update.code.visualstudio.com/api/releases/stable/{vscode_tag}"
+        )
+        electron_version = str(rel_data.get("electronVersion") or rel_data.get("electron") or "")
+    except Exception as exc:
+        print(f"WARNING: release metadata fetch failed: {exc}", file=sys.stderr)
 
 # ── 4. Hard failure if still nothing ─────────────────────────────────────────
 if not SEMVER_RE.match(electron_version):
