@@ -76,6 +76,7 @@ describe('GraphDatabase', () => {
         n('b', 'handleBlur'),
         n('c', 'render'),
       ]);
+      db.rebuildFts(); // populate FTS table so FTS-path search returns results
       const results = db.searchNodes('handle');
       assert.equal(results.length, 2);
       assert.ok(results.every(r => r.name.includes('handle')));
@@ -83,6 +84,7 @@ describe('GraphDatabase', () => {
 
     it('searchNodes returns empty array when nothing matches', () => {
       db.upsertNodes([n('a', 'foo')]);
+      db.rebuildFts();
       assert.deepEqual(db.searchNodes('zzz'), []);
     });
 
@@ -334,8 +336,8 @@ describe('GraphDatabase', () => {
       assert.equal(s.last_index_duration_ms, 1234);
     });
 
-    it('schema_version is set to "1"', () => {
-      assert.equal(db.getStats().schema_version, '1');
+    it('schema_version is set to "2"', () => {
+      assert.equal(db.getStats().schema_version, '2');
     });
   });
 

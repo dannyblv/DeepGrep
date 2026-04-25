@@ -315,7 +315,7 @@ export function GraphView({ nodes, edges, highlighted, onNodeClick, searchFocusI
       if (idSet.has(n.id())) n.addClass(`highlighted-${highlighted.color}`);
       else n.addClass('dimmed');
     });
-    cy.edges().forEach(e => e.addClass('dimmed'));
+    cy.edges().forEach(e => { e.addClass('dimmed'); });
     const targets = cy.nodes().filter(n => idSet.has(n.id()));
     if (targets.length) cy.fit(targets, 100);
   }, [highlighted]);

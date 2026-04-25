@@ -64,6 +64,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      - name: Run Rust tests
+        run: cargo test --workspace
+
       - name: Build Rust crates (release)
         run: cargo build --release
 
@@ -130,12 +133,24 @@ jobs:
             -v "$ELECTRON_VERSION" \
             -w better-sqlite3
 
+      - name: Type-check webview UI
+        working-directory: packages/webview-ui
+        run: pnpm exec tsc --noEmit
+
+      - name: Run extension unit tests (rebuilds native addon for Node.js, restores for Electron)
+        working-directory: packages/extension
+        run: node scripts/run-tests.mjs
+
       - name: Build all packages (extension + webview + mcp-server)
         run: pnpm build
 
       - name: Package .vsix
         working-directory: packages/extension
         run: pnpm package
+
+      - name: Verify VSIX integrity (post-package gate)
+        working-directory: packages/extension
+        run: pnpm test:vsix
 
       - name: Locate .vsix artifact
         id: vsix

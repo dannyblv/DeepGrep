@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 

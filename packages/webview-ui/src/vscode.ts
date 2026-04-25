@@ -1,4 +1,4 @@
-import type { WebviewToExtMsg, ExtToWebviewMsg } from '../../extension/src/webview/messages';
+import type { WebviewToExtMsg, ExtToWebviewMsg, CyNode, CyEdge, StatsPayload } from '../../extension/src/webview/messages';
 
 // acquireVsCodeApi is injected by VS Code into the webview context
 declare function acquireVsCodeApi(): {
@@ -35,4 +35,4 @@ export function onMessage(handler: (msg: ExtToWebviewMsg) => void): () => void {
   return () => window.removeEventListener('message', listener);
 }
 
-export type { WebviewToExtMsg, ExtToWebviewMsg };
+export type { WebviewToExtMsg, ExtToWebviewMsg, CyNode, CyEdge, StatsPayload };

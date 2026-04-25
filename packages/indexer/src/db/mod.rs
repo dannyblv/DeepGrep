@@ -1,6 +1,9 @@
 pub mod schema;
 pub mod writer;
 
+#[cfg(test)]
+mod tests;
+
 use anyhow::Result;
 use rusqlite::Connection;
 use schema::{FTS_SQL, MIGRATIONS_V3, SCHEMA_SQL, SCHEMA_VERSION};

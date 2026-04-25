@@ -72,3 +72,65 @@ pub fn node_hash(snippet: &str) -> String {
     let hash = Sha256::digest(snippet.as_bytes());
     hex::encode(&hash[..8])
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_id_format() {
+        assert_eq!(
+            node_id("src/foo.ts", "function", "bar", 42),
+            "src/foo.ts:function:bar:42",
+        );
+    }
+
+    #[test]
+    fn node_id_line_zero() {
+        assert_eq!(node_id("a.ts", "file", "a", 0), "a.ts:file:a:0");
+    }
+
+    #[test]
+    fn node_hash_is_16_hex_chars() {
+        let h = node_hash("fn foo() {}");
+        assert_eq!(h.len(), 16, "hash should be 8 bytes = 16 hex chars");
+        assert!(h.chars().all(|c| c.is_ascii_hexdigit()), "hash should be hex");
+    }
+
+    #[test]
+    fn node_hash_is_deterministic() {
+        let snippet = "function handleClick() { return 42; }";
+        assert_eq!(node_hash(snippet), node_hash(snippet));
+    }
+
+    #[test]
+    fn node_hash_differs_for_different_snippets() {
+        assert_ne!(node_hash("fn foo() {}"), node_hash("fn bar() {}"));
+    }
+
+    #[test]
+    fn node_hash_empty_string_does_not_panic() {
+        let h = node_hash("");
+        assert_eq!(h.len(), 16);
+    }
+
+    #[test]
+    fn node_type_serialises_as_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&NodeType::Function).unwrap(),
+            "\"function\"",
+        );
+        assert_eq!(
+            serde_json::to_string(&NodeType::TypeAlias).unwrap(),
+            "\"type\"",
+        );
+    }
+
+    #[test]
+    fn edge_type_re_exports_serialises_with_hyphen() {
+        assert_eq!(
+            serde_json::to_string(&EdgeType::ReExports).unwrap(),
+            "\"re-exports\"",
+        );
+    }
+}

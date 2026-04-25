@@ -128,6 +128,7 @@
     "test": "node scripts/run-tests.mjs",
     "test:only": "mocha",
     "test:watch": "mocha --watch",
+    "test:vsix": "mocha --grep 'VSIX integrity'",
     "package": "node scripts/copy-binaries.mjs && node scripts/resolve-symlinks.mjs && vsce package --no-dependencies",
     "rebuild-native": "node ../../scripts/rebuild-native.mjs",
     "clean": "rimraf dist out"
@@ -147,6 +148,7 @@
     "@types/node": "^22.15.3",
     "@types/vscode": "^1.99.0",
     "@vscode/vsce": "^3.3.2",
+    "bindings": "^1.5.0",
     "esbuild": "^0.25.3",
     "mocha": "^11.7.5",
     "rimraf": "^6.0.1",
