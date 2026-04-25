@@ -142,12 +142,6 @@ body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);col
 .ibar-fill{height:4px;border-radius:2px;background:linear-gradient(90deg,#4a9eff,#4ec9a8);transition:width .7s ease}
 .ibar-lbl{font-size:10px;color:var(--vscode-descriptionForeground);margin-top:4px;line-height:1.3}
 
-/* Benefit pills */
-.ben-pills{display:flex;flex-direction:column;gap:4px}
-.bpill{display:flex;align-items:center;gap:7px;padding:5px 7px;background:var(--vscode-editorWidget-background,#1e1e1e);border:1px solid var(--vscode-sideBar-border,#333);border-radius:4px;font-size:11px}
-.bpill-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
-.bpill-val{margin-left:auto;font-size:10px;font-weight:600;color:#4ec9a8;white-space:nowrap}
-
 /* Actions */
 .actions{display:flex;flex-direction:column;gap:6px}
 .btn{display:flex;align-items:center;gap:8px;padding:6px 10px;border:none;border-radius:4px;font-size:12px;font-family:inherit;cursor:pointer;width:100%;text-align:left;transition:opacity .15s,background .15s}
@@ -277,17 +271,6 @@ body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);col
     <div class="row"><span class="lbl">MCP queries</span><span class="val b" id="qc">—</span></div>
     <div class="row"><span class="lbl">Tokens saved</span><span class="val g" id="ts">—</span></div>
     <div class="row"><span class="lbl">Avg per query</span><span class="val" id="avgq">—</span></div>
-  </div>
-
-  <!-- Benefits -->
-  <div class="sec">
-    <div class="sh">Benefits</div>
-    <div class="ben-pills">
-      <div class="bpill"><div class="bpill-dot" style="background:#4a9eff"></div><span>Structural search</span><span class="bpill-val">AST-precise</span></div>
-      <div class="bpill"><div class="bpill-dot" style="background:#4ec9a8"></div><span>Token efficiency</span><span class="bpill-val">70–80% less</span></div>
-      <div class="bpill"><div class="bpill-dot" style="background:#f0a500"></div><span>Context quality</span><span class="bpill-val">Exact symbols</span></div>
-      <div class="bpill"><div class="bpill-dot" style="background:#c084fc"></div><span>Cross-file chains</span><span class="bpill-val">Auto-traced</span></div>
-    </div>
   </div>
 
   <!-- Actions -->

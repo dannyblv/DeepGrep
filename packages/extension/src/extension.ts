@@ -159,7 +159,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
 
     vscode.commands.registerCommand('deepgrep.showOnboarding', () => {
-      HowToUsePanel.show();
+      HowToUsePanel.show(context.extensionUri);
     }),
 
     vscode.commands.registerCommand('deepgrep.clearMemory', async () => {
