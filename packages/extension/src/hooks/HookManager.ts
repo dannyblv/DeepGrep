@@ -14,16 +14,17 @@ The codebase is indexed in \`.deepgrep/graph.db\`. Use \`mcp__deepgrep__*\` tool
 ---
 **⬡ DeepGrep** — \`<tool>\` — *<flavor>*
 
-Flavor per tool: search_graph → *searching AST index…* · get_context_for_symbol → *tracing callers & callees…* · get_dependency_chain → *unwinding import chain…* · find_related_nodes → *expanding graph neighborhood…* · get_stats → *reading index metrics…*
+Flavor per tool: search_graph → *searching AST index…* · search_text → *searching string/comment index…* · get_context_for_symbol → *tracing callers & callees…* · get_dependency_chain → *unwinding import chain…* · find_related_nodes → *expanding graph neighborhood…* · get_stats → *reading index metrics…*
 
 | Goal | Tool |
 |---|---|
 | Find a function/class by name | \`mcp__deepgrep__search_graph\` |
+| Find a string literal or comment | \`mcp__deepgrep__search_text\` |
 | What calls this function? | \`mcp__deepgrep__get_context_for_symbol\` |
 | Trace imports/dependencies | \`mcp__deepgrep__get_dependency_chain\` |
 | What is near this file/symbol? | \`mcp__deepgrep__find_related_nodes\` |
 
-Only fall back to \`grep\`/\`Bash\` if a graph query returns no results.
+Only fall back to \`rg\`/\`Bash\` if both graph and text queries return no results.
 `;
 
 interface ClaudeSettings {

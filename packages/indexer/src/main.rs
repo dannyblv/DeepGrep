@@ -68,6 +68,9 @@ fn cmd_index(workspace: &PathBuf, db_path: &PathBuf) -> Result<()> {
     if db.fts_ready {
         writer::rebuild_fts(conn)?;
     }
+    if db.content_fts_ready {
+        writer::upsert_content_lines(conn, &result.content_lines)?;
+    }
     conn.execute_batch("COMMIT")?;
 
     let duration = start.elapsed().as_millis();
@@ -123,6 +126,9 @@ fn cmd_reindex(file: &PathBuf, workspace: &PathBuf, db_path: &PathBuf) -> Result
         writer::upsert_edges(conn, &result.edges)?;
         if db.fts_ready {
             writer::update_fts_for_file(conn, &rel_path)?;
+        }
+        if db.content_fts_ready {
+            writer::update_content_for_file(conn, &rel_path, &result.content_lines)?;
         }
         changed
     } else {

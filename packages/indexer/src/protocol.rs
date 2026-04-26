@@ -56,11 +56,20 @@ pub struct ReExport {
     pub resolved_source_base: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct ContentLine {
+    pub file_path: String,
+    pub line: usize,
+    pub kind: String,
+    pub content: String,
+}
+
 #[derive(Debug, Default)]
 pub struct IndexResult {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
     pub re_exports: Vec<ReExport>,
+    pub content_lines: Vec<ContentLine>,
     /// Files skipped during indexing (too large, parse error, unsupported type).
     pub skipped_files: usize,
 }

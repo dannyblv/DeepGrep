@@ -1,4 +1,4 @@
-pub const SCHEMA_VERSION: &str = "3";
+pub const SCHEMA_VERSION: &str = "4";
 
 pub const SCHEMA_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS nodes (
@@ -57,8 +57,19 @@ CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
 );
 "#;
 
+pub const CONTENT_FTS_SQL: &str = r#"
+CREATE VIRTUAL TABLE IF NOT EXISTS content_fts USING fts5(
+    file_path UNINDEXED,
+    line      UNINDEXED,
+    kind      UNINDEXED,
+    content,
+    tokenize  = 'trigram'
+);
+"#;
+
 /// Migrations from v0/v1/v2 → v3 (adds node_hash + stale_at).
 pub const MIGRATIONS_V3: &[&str] = &[
     "ALTER TABLE nodes ADD COLUMN node_hash TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE agent_memory ADD COLUMN stale_at INTEGER",
 ];
+// v3 → v4: content_fts is a new virtual table created by CONTENT_FTS_SQL; no ALTER needed.

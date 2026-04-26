@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::protocol::{EdgeType, GraphEdge, GraphNode, NodeType};
+use crate::protocol::{ContentLine, EdgeType, GraphEdge, GraphNode, NodeType};
 
 fn node_type_str(t: &NodeType) -> &'static str {
     match t {
@@ -28,9 +28,8 @@ fn edge_type_str(t: &EdgeType) -> &'static str {
 
 pub fn clear_all(conn: &Connection) -> Result<()> {
     conn.execute_batch("DELETE FROM edges; DELETE FROM nodes;")?;
-    if conn.execute("DELETE FROM nodes_fts", []).is_err() {
-        // FTS table may not exist on very old DBs
-    }
+    let _ = conn.execute("DELETE FROM nodes_fts", []);
+    let _ = conn.execute("DELETE FROM content_fts", []);
     Ok(())
 }
 
@@ -41,7 +40,23 @@ pub fn delete_file(conn: &Connection, rel_path: &str) -> Result<()> {
         [rel_path, rel_path],
     )?;
     conn.execute("DELETE FROM nodes WHERE file_path = ?", [rel_path])?;
+    let _ = conn.execute("DELETE FROM content_fts WHERE file_path = ?", [rel_path]);
     Ok(())
+}
+
+pub fn upsert_content_lines(conn: &Connection, lines: &[ContentLine]) -> Result<()> {
+    let mut stmt = conn.prepare_cached(
+        "INSERT INTO content_fts (file_path, line, kind, content) VALUES (?, ?, ?, ?)",
+    )?;
+    for l in lines {
+        stmt.execute(rusqlite::params![l.file_path, l.line as i64, l.kind, l.content])?;
+    }
+    Ok(())
+}
+
+pub fn update_content_for_file(conn: &Connection, rel_path: &str, lines: &[ContentLine]) -> Result<()> {
+    let _ = conn.execute("DELETE FROM content_fts WHERE file_path = ?", [rel_path]);
+    upsert_content_lines(conn, lines)
 }
 
 pub fn upsert_nodes(conn: &Connection, nodes: &[GraphNode]) -> Result<()> {

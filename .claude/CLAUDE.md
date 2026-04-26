@@ -2,23 +2,25 @@
 
 DeepGrep is a VS Code extension that indexes a codebase into an AST-derived dependency graph (SQLite), exposes it to Claude Code via a local MCP server, and visualizes it in a Cytoscape.js webview.
 
-## Search: DeepGrep for structure, grep for text
+## Search: DeepGrep for structure, search_text for literals, rg for everything else
 
 DeepGrep indexes **defined names** (functions, classes, interfaces, import specifiers).
-It does **not** index string literals, comments, JSX prop values, config keys, or error messages.
+`search_text` indexes **string literals and comments**.
+Use `rg` only when both return no results.
 
-| Use DeepGrep for | Use grep for |
-|---|---|
-| Find a defined symbol by name | String literals, config keys, error messages |
-| Callers / callees of a function | JSX `<Component />` usage (until JSX edges land) |
-| Import dependency chain | Comments, regexes, TODOs |
-| Nearby nodes in the graph | "Is this used anywhere?" — always confirm a miss |
+| Use DeepGrep for | Use search_text for | Use rg for |
+|---|---|---|
+| Find a defined symbol by name | String literals, error messages | Config keys, regexes |
+| Callers / callees of a function | JSX prop values, TODOs | Multi-file text patterns |
+| Import dependency chain | Comments | Anything not yet indexed |
+| Nearby nodes in the graph | — | — |
 
-**Never trust "No nodes found" alone** — always confirm a DeepGrep miss with grep before concluding a symbol doesn't exist.
+**Never trust "No nodes found" alone** — confirm a `search_graph` miss with `search_text`, then `rg`, before concluding a symbol doesn't exist.
 
 | Goal | Tool |
 |---|---|
 | Find symbol by name | `mcp__deepgrep__search_graph` |
+| Find string literal or comment | `mcp__deepgrep__search_text` |
 | Callers / callees | `mcp__deepgrep__get_context_for_symbol` |
 | Import chain | `mcp__deepgrep__get_dependency_chain` |
 | Nearby nodes | `mcp__deepgrep__find_related_nodes` |

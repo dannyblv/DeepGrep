@@ -25,7 +25,7 @@ pub fn run(db: &Db) -> Result<String> {
          {}\
          \n\
          **Coverage note**: Index tracks function/class/interface/import names. \
-         String literals, comments, JSX prop values, and config keys are not indexed — use grep for those.\n",
+         String literals, comments, JSX prop values, and config keys are not indexed — use rg for those.\n",
         stats["node_count"],
         stats["edge_count"],
         stats["schema_version"].as_str().unwrap_or("?"),

@@ -2,6 +2,13 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 
+export interface ContentMatch {
+  file_path: string;
+  line: number;
+  kind: string;
+  content: string;
+}
+
 export interface GraphNode {
   id: string;
   type: string;
@@ -37,6 +44,7 @@ type Stmt = ReturnType<DatabaseSync['prepare']>;
 export class GraphDatabase {
   private readonly db: DatabaseSync;
   private readonly _searchFts: Stmt | null;
+  private readonly _searchContentFts: Stmt | null;
 
   // Pre-compiled statements — pay prepare cost once at startup, not per call
   private readonly _getNode:       Stmt;
@@ -135,6 +143,18 @@ export class GraphDatabase {
 
     // FTS5 — only available after the extension has run a full re-index with v2 schema
     this._searchFts = this._tryPrepareFts();
+    this._searchContentFts = this._tryPrepareContentFts();
+  }
+
+  private _tryPrepareContentFts(): Stmt | null {
+    try {
+      this.db.prepare('SELECT 1 FROM content_fts LIMIT 1').get();
+      return this.db.prepare(
+        'SELECT file_path, line, kind, content FROM content_fts WHERE content MATCH ? LIMIT ?',
+      );
+    } catch {
+      return null;
+    }
   }
 
   private _tryPrepareFts(): Stmt | null {
@@ -264,6 +284,16 @@ export class GraphDatabase {
 
   setAgentMemory(agentId: string, key: string, value: string, nodeId: string | null = null): void {
     this._setMemory.run(`${agentId}:${key}`, agentId, nodeId, key, value, Date.now());
+  }
+
+  searchContent(query: string, limit = 20): ContentMatch[] {
+    if (!this._searchContentFts) return [];
+    try {
+      const phraseQuery = '"' + query.replace(/"/g, '""') + '"';
+      return this._searchContentFts.all(phraseQuery, limit) as unknown as ContentMatch[];
+    } catch {
+      return [];
+    }
   }
 
   getStats() {

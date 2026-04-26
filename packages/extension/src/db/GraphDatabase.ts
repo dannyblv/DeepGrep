@@ -29,6 +29,13 @@ export interface AgentMemoryEntry {
   created_at: number;
 }
 
+export interface ContentMatch {
+  file_path: string;
+  line: number;
+  kind: string;
+  content: string;
+}
+
 export interface Stats {
   node_count: number;
   edge_count: number;
@@ -89,6 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_agent ON agent_memory(agent_id, key);
 export class GraphDatabase {
   private db: Database.Database;
   private ftsReady = false;
+  private contentFtsReady = false;
 
   constructor(dbPath: string) {
     const dir = dirname(dbPath);
@@ -105,6 +113,7 @@ export class GraphDatabase {
     this.db.pragma('cache_size = -32000'); // 32 MB page cache
     this.db.exec(SCHEMA_SQL);
     this.ftsReady = this._tryInitFts();
+    this.contentFtsReady = this._tryInitContentFts();
     this.ensureSchemaVersion();
   }
 
@@ -122,6 +131,23 @@ export class GraphDatabase {
       return true;
     } catch {
       return false; // SQLite < 3.34 — fall back to LIKE
+    }
+  }
+
+  private _tryInitContentFts(): boolean {
+    try {
+      this.db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS content_fts USING fts5(
+          file_path UNINDEXED,
+          line      UNINDEXED,
+          kind      UNINDEXED,
+          content,
+          tokenize  = 'trigram'
+        )
+      `);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -144,6 +170,7 @@ export class GraphDatabase {
       this.db.exec('DELETE FROM edges');
       this.db.exec('DELETE FROM nodes');
       if (this.ftsReady) this.db.exec('DELETE FROM nodes_fts');
+      if (this.contentFtsReady) this.db.exec('DELETE FROM content_fts');
     })();
   }
 
@@ -250,6 +277,20 @@ export class GraphDatabase {
       )
       .all(`%${query}%`, limit)
       .map(r => this.deserializeNode(r));
+  }
+
+  searchContent(query: string, limit = 20): ContentMatch[] {
+    if (!this.contentFtsReady) return [];
+    try {
+      const phraseQuery = '"' + query.replace(/"/g, '""') + '"';
+      return this.db
+        .prepare<[string, number], ContentMatch>(
+          'SELECT file_path, line, kind, content FROM content_fts WHERE content MATCH ? LIMIT ?',
+        )
+        .all(phraseQuery, limit);
+    } catch {
+      return [];
+    }
   }
 
   getNodesForFile(filePath: string): GraphNode[] {

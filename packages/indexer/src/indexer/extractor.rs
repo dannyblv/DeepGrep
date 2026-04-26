@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use tree_sitter::Node;
 
-use crate::protocol::{node_id, node_hash, EdgeType, GraphEdge, GraphNode, IndexResult, NodeType, ReExport};
+use crate::protocol::{node_id, node_hash, ContentLine, EdgeType, GraphEdge, GraphNode, IndexResult, NodeType, ReExport};
 
 pub struct Extractor<'src> {
     source: &'src [u8],
@@ -10,6 +10,7 @@ pub struct Extractor<'src> {
     nodes: Vec<GraphNode>,
     edges: Vec<GraphEdge>,
     re_exports: Vec<ReExport>,
+    content_lines: Vec<ContentLine>,
     imported_names: HashMap<String, String>,
     file_node_id: String,
 }
@@ -39,6 +40,7 @@ impl<'src> Extractor<'src> {
             nodes,
             edges: Vec::new(),
             re_exports: Vec::new(),
+            content_lines: Vec::new(),
             imported_names: HashMap::new(),
             file_node_id: file_id,
         }
@@ -67,6 +69,7 @@ impl<'src> Extractor<'src> {
     }
 
     fn visit(&mut self, node: Node) {
+        self.maybe_extract_content(node);
         match node.kind() {
             // TypeScript / JavaScript
             "function_declaration" | "method_declaration" | "function_definition" | "function_item"
@@ -83,6 +86,24 @@ impl<'src> Extractor<'src> {
             "jsx_opening_element" | "jsx_self_closing_element" => self.handle_jsx(node),
             "pair" => self.handle_pair(node),
             _ => {}
+        }
+    }
+
+    fn maybe_extract_content(&mut self, node: Node) {
+        let kind = match node.kind() {
+            "string" | "string_literal" | "interpreted_string_literal" | "template_string" | "raw_string_literal" => "string",
+            "comment" | "line_comment" | "block_comment" => "comment",
+            _ => return,
+        };
+        let raw = node.utf8_text(self.source).unwrap_or("");
+        let content = strip_content(kind, raw);
+        if content.len() >= 4 && content.len() <= 500 {
+            self.content_lines.push(ContentLine {
+                file_path: self.rel_path.clone(),
+                line: node.start_position().row,
+                kind: kind.to_string(),
+                content,
+            });
         }
     }
 
@@ -566,6 +587,7 @@ impl<'src> Extractor<'src> {
             nodes: self.nodes,
             edges: self.edges,
             re_exports: self.re_exports,
+            content_lines: self.content_lines,
             skipped_files: 0,
         }
     }
@@ -668,6 +690,42 @@ mod tests {
         );
         let calls = r.edges.iter().filter(|e| matches!(e.edge_type, EdgeType::Calls)).count();
         assert!(calls > 0, "JSX render of <HomeHeader /> should emit a calls edge");
+    }
+}
+
+fn strip_content(kind: &str, raw: &str) -> String {
+    let t = raw.trim();
+    match kind {
+        "string" => {
+            let len = t.len();
+            if len < 2 {
+                return t.to_string();
+            }
+            let first = t.chars().next().unwrap();
+            let last = t.chars().last().unwrap();
+            if (first == '"' && last == '"')
+                || (first == '\'' && last == '\'')
+                || (first == '`' && last == '`')
+            {
+                t[1..len - 1].trim().to_string()
+            } else {
+                // Rust raw strings: r"..." or r#"..."# etc.
+                let inner = t.trim_start_matches('r').trim_start_matches('#').trim_matches('"').trim_matches('#');
+                inner.trim().to_string()
+            }
+        }
+        "comment" => {
+            if t.starts_with("//") {
+                t[2..].trim().to_string()
+            } else if t.starts_with("/*") && t.ends_with("*/") {
+                t[2..t.len() - 2].trim().to_string()
+            } else if t.starts_with('#') {
+                t[1..].trim().to_string()
+            } else {
+                t.to_string()
+            }
+        }
+        _ => t.to_string(),
     }
 }
 

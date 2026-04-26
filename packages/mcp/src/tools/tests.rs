@@ -90,11 +90,11 @@ fn search_graph_served_is_zero_on_miss() {
 }
 
 #[test]
-fn search_graph_miss_includes_grep_suggestion() {
+fn search_graph_miss_includes_rg_suggestion() {
     let db = fixture();
     let (text, _) =
         dispatch(&db, "search_graph", &json!({"query": "definitely_absent"}), 4000).unwrap();
-    assert!(text.contains("grep"), "miss message should recommend grep, got: {}", text);
+    assert!(text.contains("rg"), "miss message should recommend rg, got: {}", text);
 }
 
 #[test]
@@ -169,6 +169,20 @@ fn get_stats_reports_zero_served() {
     let (text, served) = dispatch(&db, "get_stats", &json!({}), 4000).unwrap();
     assert_eq!(served, 0, "get_stats is metadata-only, shouldn't inflate token savings");
     assert!(text.contains("Nodes"), "stats text should reference node counts");
+}
+
+#[test]
+fn search_text_gracefully_handles_missing_content_fts() {
+    // fixture() has no content_fts table — tool should return a miss message, not panic
+    let db = fixture();
+    let (text, served) =
+        dispatch(&db, "search_text", &json!({"query": "payment_error"}), 4000).unwrap();
+    assert_eq!(served, 0);
+    assert!(
+        text.contains("No content matches"),
+        "should show miss message when content_fts absent, got: {}",
+        text
+    );
 }
 
 #[test]

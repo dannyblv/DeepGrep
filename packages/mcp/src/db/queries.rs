@@ -104,14 +104,39 @@ fn get_edges(conn: &Connection, sql: &str, id: &str) -> Result<Vec<Value>> {
     Ok(rows)
 }
 
+// ── Node by file path ─────────────────────────────────────────────────────────
+
+pub fn get_file_node_id(conn: &Connection, file_path: &str) -> Result<Option<String>> {
+    let row = conn
+        .query_row(
+            "SELECT id FROM nodes WHERE file_path = ? AND type = 'file' LIMIT 1",
+            [file_path],
+            |r| r.get::<_, String>(0),
+        )
+        .optional()?;
+    Ok(row)
+}
+
 // ── BFS neighbourhood ─────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub fn get_neighbourhood(conn: &Connection, start_id: &str, max_hops: usize) -> Result<Vec<String>> {
-    let mut visited = std::collections::HashSet::new();
+    let ordered = get_neighbourhood_ordered(conn, start_id, max_hops)?;
+    Ok(ordered.into_iter().map(|(id, _)| id).collect())
+}
+
+/// Returns (node_id, hop_distance) pairs in BFS order (closest first).
+pub fn get_neighbourhood_ordered(
+    conn: &Connection,
+    start_id: &str,
+    max_hops: usize,
+) -> Result<Vec<(String, usize)>> {
+    let mut visited: std::collections::HashSet<String> = std::collections::HashSet::new();
     visited.insert(start_id.to_string());
     let mut frontier = vec![start_id.to_string()];
+    let mut result: Vec<(String, usize)> = Vec::new();
 
-    for _ in 0..max_hops {
+    for hop in 1..=max_hops {
         if frontier.is_empty() {
             break;
         }
@@ -119,7 +144,7 @@ pub fn get_neighbourhood(conn: &Connection, start_id: &str, max_hops: usize) -> 
         let out_sql = format!("SELECT target_id FROM edges WHERE source_id IN ({})", placeholders);
         let in_sql = format!("SELECT source_id FROM edges WHERE target_id IN ({})", placeholders);
 
-        let mut next: Vec<String> = Vec::new();
+        let mut new_frontier: Vec<String> = Vec::new();
         for sql in &[out_sql, in_sql] {
             let mut stmt = conn.prepare(sql)?;
             let params: Vec<&dyn rusqlite::ToSql> =
@@ -128,14 +153,18 @@ pub fn get_neighbourhood(conn: &Connection, start_id: &str, max_hops: usize) -> 
                 .query_map(params.as_slice(), |r| r.get(0))?
                 .filter_map(|r| r.ok())
                 .collect();
-            next.extend(ids);
+            for id in ids {
+                if visited.insert(id.clone()) {
+                    result.push((id.clone(), hop));
+                    new_frontier.push(id);
+                }
+            }
         }
 
-        frontier = next.into_iter().filter(|id| visited.insert(id.clone())).collect();
+        frontier = new_frontier;
     }
 
-    visited.remove(start_id);
-    Ok(visited.into_iter().collect())
+    Ok(result)
 }
 
 // ── Dependency chain (DFS, callee direction) ─────────────────────────────────
@@ -159,6 +188,34 @@ pub fn get_dep_chain(conn: &Connection, start_id: &str, cap: usize) -> Result<Ve
 
     visited.remove(start_id);
     Ok(visited.into_iter().collect())
+}
+
+// ── Content FTS (string literals + comments) ──────────────────────────────────
+
+pub fn search_content(conn: &Connection, query: &str, limit: usize) -> Result<Vec<Value>> {
+    let phrase = format!("\"{}\"", query.replace('"', "\"\""));
+    let result = conn
+        .prepare(
+            "SELECT file_path, line, kind, content
+             FROM content_fts
+             WHERE content MATCH ?
+             LIMIT ?",
+        )
+        .and_then(|mut stmt| {
+            let rows: Vec<Value> = stmt
+                .query_map(rusqlite::params![phrase, limit as i64], |row| {
+                    Ok(serde_json::json!({
+                        "file":    row.get::<_, String>(0)?,
+                        "line":    row.get::<_, i64>(1)?,
+                        "kind":    row.get::<_, String>(2)?,
+                        "content": row.get::<_, String>(3)?,
+                    }))
+                })?
+                .filter_map(|r| r.ok())
+                .collect();
+            Ok(rows)
+        });
+    Ok(result.unwrap_or_default())
 }
 
 // ── Agent memory ──────────────────────────────────────────────────────────────

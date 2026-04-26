@@ -4,6 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { resolve } from 'path';
 import { existsSync, writeFileSync } from 'fs';
+import { spawnSync } from 'child_process';
 import { GraphDatabase } from './db.js';
 
 const DB_PATH = process.env.DEEPGREP_DB_PATH ?? resolve(process.cwd(), '.deepgrep', 'graph.db');
@@ -72,16 +73,23 @@ server.tool(
     symbol: z.string().optional(),
     file_path: z.string().optional(),
     hops: z.number().min(1).max(5).default(2),
+    max_nodes: z.number().min(1).max(200).default(60),
     agent_id: z.string().optional(),
   },
-  async ({ symbol, file_path, hops, agent_id }) => {
+  async ({ symbol, file_path, hops, max_nodes, agent_id }) => {
     let startId: string | null = null;
     if (symbol) {
       const nodes = db.searchNodes(symbol, 3);
       startId = nodes[0]?.id ?? null;
     } else if (file_path) {
-      const nodes = db.getNodesForFile(file_path);
-      startId = nodes.find(n => n.type === 'file')?.id ?? nodes[0]?.id ?? null;
+      // Try direct file_path lookup first, then fall back to name search
+      const byPath = db.getNodesForFile(file_path).find(n => n.type === 'file');
+      if (byPath) {
+        startId = byPath.id;
+      } else {
+        const byName = db.searchNodes(file_path, 10);
+        startId = byName.find(n => n.type === 'file')?.id ?? byName[0]?.id ?? null;
+      }
     }
     if (!startId) {
       signalActivity('find_related_nodes', 0);
@@ -93,15 +101,15 @@ server.tool(
       .filter(Boolean)
       .filter(n => agentFilter(n!, agent_id));
 
-    const budget = estimateBudget(neighbours.length);
-    const result = neighbours.slice(0, budget).map(n => formatNode(n!));
+    const capped = Math.min(neighbours.length, max_nodes);
+    const result = neighbours.slice(0, capped).map(n => formatNode(n!));
     signalActivity('find_related_nodes', result.length);
 
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ start_id: startId, related: result, total: neighbours.length }, null, 2),
+          text: JSON.stringify({ start_id: startId, related: result, total: neighbours.length, shown: capped }, null, 2),
         },
       ],
     };
@@ -160,8 +168,19 @@ server.tool(
     agent_id: z.string().optional(),
   },
   async ({ query, limit, agent_id }) => {
-    const nodes = db.searchNodes(query, limit).filter(n => agentFilter(n, agent_id));
+    let nodes = db.searchNodes(query, limit).filter(n => agentFilter(n, agent_id));
+    if (nodes.length === 0) {
+      nodes = rgFallbackNodes(query, limit);
+    }
     signalActivity('search_graph', nodes.length);
+    if (nodes.length === 0) {
+      return {
+        content: [{
+          type: 'text',
+          text: `No nodes found matching "${query}"\n\n**Coverage note**: the index tracks defined names — functions, classes, interfaces, and import specifiers. It does not cover string literals, comments, JSX prop values, or config keys. If you expected a match, use search_text or rg before concluding the symbol doesn't exist.`,
+        }],
+      };
+    }
     return {
       content: [
         {
@@ -169,6 +188,36 @@ server.tool(
           text: JSON.stringify(nodes.map(n => formatNode(n)), null, 2),
         },
       ],
+    };
+  },
+);
+
+// ── Tool: search_text ────────────────────────────────────────────────────────
+server.tool(
+  'search_text',
+  'Search string literals and comments across all indexed files. Use for finding error messages, config keys, JSX prop values, and TODO comments that are not indexed as symbols.',
+  {
+    query: z.string().describe('Text to search for in string literals and comments'),
+    limit: z.number().min(1).max(50).default(20),
+    kind: z.enum(['string', 'comment']).optional().describe('Filter to only strings or only comments'),
+  },
+  async ({ query, limit, kind }) => {
+    const matches = db.searchContent(query, limit);
+    const filtered = kind ? matches.filter(m => m.kind === kind) : matches;
+    signalActivity('search_text', 0);
+    if (filtered.length === 0) {
+      return {
+        content: [{
+          type: 'text',
+          text: `No content matches for "${query}"\n\n**Coverage note**: content_fts indexes string literals and comments. For symbol names use \`search_graph\`. Run **Re-index Workspace** if results seem missing.`,
+        }],
+      };
+    }
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(filtered, null, 2),
+      }],
     };
   },
 );
@@ -231,6 +280,78 @@ server.tool(
     };
   },
 );
+
+// ── rg fallback ───────────────────────────────────────────────────────────────
+
+function rgFallbackNodes(query: string, limit: number): Array<{
+  id: string; name: string; type: string; file_path: string;
+  start_line: number; end_line: number; code_snippet: string; node_hash: string;
+  language: string; metadata: Record<string, unknown>;
+}> {
+  if (!WORKSPACE) return [];
+  const result = spawnSync('rg', [
+    '--json', '-n', '-i', '--max-count', '3',
+    '-g', '*.{ts,tsx,js,jsx,rs,go,py}',
+    '--', query, WORKSPACE,
+  ], { encoding: 'utf8', timeout: 5000 });
+  if (result.error || !result.stdout) return [];
+
+  const prefix = WORKSPACE.endsWith('/') ? WORKSPACE : `${WORKSPACE}/`;
+  const nodes: ReturnType<typeof rgFallbackNodes> = [];
+
+  for (const line of result.stdout.split('\n')) {
+    if (nodes.length >= limit) break;
+    let parsed: { type?: string; data?: Record<string, unknown> };
+    try { parsed = JSON.parse(line); } catch { continue; }
+    if (parsed.type !== 'match' || !parsed.data) continue;
+
+    const data = parsed.data as Record<string, unknown>;
+    const absFile = (data.path as Record<string,string>)?.text ?? '';
+    const lineNum = (data.line_number as number) ?? 0;
+    const matchedLine = ((data.lines as Record<string,string>)?.text ?? '').trim();
+    const relFile = absFile.startsWith(prefix) ? absFile.slice(prefix.length) : absFile;
+
+    const nodeType = inferNodeType(matchedLine);
+    const nodeName = inferName(matchedLine, query) ?? query;
+
+    nodes.push({
+      id: `${relFile}:${nodeType}:${nodeName}:${lineNum}`,
+      name: nodeName,
+      type: nodeType,
+      file_path: relFile,
+      start_line: lineNum,
+      end_line: lineNum,
+      code_snippet: matchedLine.slice(0, 120),
+      node_hash: '',
+      language: '',
+      metadata: {},
+    });
+  }
+  return nodes;
+}
+
+function inferNodeType(line: string): string {
+  if (line.includes('function ') || line.includes('=> {') || line.includes('fn ')) return 'function';
+  if (line.includes('class ')) return 'class';
+  if (line.includes('interface ')) return 'interface';
+  if (line.includes('export default') || line.includes('module.exports')) return 'export';
+  return 'symbol';
+}
+
+function inferName(line: string, query: string): string | null {
+  const fnMatch = line.match(/function\s+([A-Za-z_]\w*)/);
+  if (fnMatch) return fnMatch[1];
+  const rustFnMatch = line.match(/fn\s+([A-Za-z_]\w*)/);
+  if (rustFnMatch) return rustFnMatch[1];
+  for (const kw of ['const ', 'let ', 'var ']) {
+    const idx = line.indexOf(kw);
+    if (idx !== -1) {
+      const name = line.slice(idx + kw.length).match(/^([A-Za-z_]\w*)/)?.[1] ?? '';
+      if (name && name.toLowerCase().includes(query.toLowerCase())) return name;
+    }
+  }
+  return null;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

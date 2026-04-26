@@ -6,11 +6,12 @@ mod tests;
 
 use anyhow::Result;
 use rusqlite::Connection;
-use schema::{FTS_SQL, MIGRATIONS_V3, SCHEMA_SQL, SCHEMA_VERSION};
+use schema::{CONTENT_FTS_SQL, FTS_SQL, MIGRATIONS_V3, SCHEMA_SQL, SCHEMA_VERSION};
 
 pub struct Database {
     pub conn: Connection,
     pub fts_ready: bool,
+    pub content_fts_ready: bool,
 }
 
 impl Database {
@@ -22,8 +23,9 @@ impl Database {
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA cache_size = -32000;")?;
         conn.execute_batch(SCHEMA_SQL)?;
         let fts_ready = conn.execute_batch(FTS_SQL).is_ok();
+        let content_fts_ready = conn.execute_batch(CONTENT_FTS_SQL).is_ok();
         Self::migrate(&conn)?;
-        Ok(Self { conn, fts_ready })
+        Ok(Self { conn, fts_ready, content_fts_ready })
     }
 
     fn migrate(conn: &Connection) -> Result<()> {

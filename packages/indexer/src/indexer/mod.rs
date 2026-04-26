@@ -128,6 +128,7 @@ pub fn index_workspace(
         merged.nodes.extend(r.nodes);
         merged.edges.extend(r.edges);
         merged.re_exports.extend(r.re_exports);
+        merged.content_lines.extend(r.content_lines);
     }
     merged.skipped_files = skipped_files;
 
