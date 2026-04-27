@@ -6,9 +6,11 @@ use crate::db::{queries, Db};
 pub fn run(db: &Db, args: &Value) -> Result<(String, usize)> {
     let hops = args["hops"].as_u64().unwrap_or(2).clamp(1, 5) as usize;
     let max_nodes = args["max_nodes"].as_u64().unwrap_or(60).clamp(1, 200) as usize;
+    // slim=true strips code snippets entirely — just name/type/file/line.
+    // Defaults to true when hops >= 2 or result count > 8 to stay within token budget.
+    let slim_explicit = args.get("slim").and_then(|v| v.as_bool());
 
     let start_id = resolve_start_id(db, args)?;
-
     let banner = queries::staleness_banner(&db.conn).unwrap_or_default();
 
     let start_id = match start_id {
@@ -19,6 +21,9 @@ pub fn run(db: &Db, args: &Value) -> Result<(String, usize)> {
     let related = queries::get_neighbourhood_ordered(&db.conn, &start_id, hops)?;
     let total = related.len();
     let capped = related.len().min(max_nodes);
+
+    // Auto-slim when the result set is large or multi-hop; saves 50-70% tokens.
+    let slim = slim_explicit.unwrap_or(hops >= 2 || capped > 8);
 
     let label = if let Some(node) = queries::get_node(&db.conn, &start_id)? {
         format!(
@@ -31,8 +36,9 @@ pub fn run(db: &Db, args: &Value) -> Result<(String, usize)> {
     };
 
     let mut out = format!(
-        "{}## Related nodes for {} — {} found within {} hop(s)\n\n",
-        banner, label, total, hops
+        "{}## Related nodes for {} — {} found within {} hop(s){}\n\n",
+        banner, label, total, hops,
+        if slim { " (slim)" } else { "" },
     );
 
     let mut current_hop = 0usize;
@@ -48,7 +54,7 @@ pub fn run(db: &Db, args: &Value) -> Result<(String, usize)> {
             let start = node["start_line"].as_i64().unwrap_or(0);
             let end = node["end_line"].as_i64().unwrap_or(0);
 
-            if *hop == 1 {
+            if !slim && *hop == 1 {
                 out.push_str(&format!("#### `{}` ({}) — {}:{}-{}\n", name, kind, file, start, end));
                 let snippet = node["snippet"].as_str().unwrap_or("").trim();
                 if !snippet.is_empty() {
@@ -58,8 +64,8 @@ pub fn run(db: &Db, args: &Value) -> Result<(String, usize)> {
                 }
             } else {
                 out.push_str(&format!(
-                    "- `{}` ({}) {}:{}\n",
-                    name, kind, file, start,
+                    "- `{}` ({}) {}:{}-{}\n",
+                    name, kind, file, start, end,
                 ));
             }
         }
@@ -79,11 +85,9 @@ fn resolve_start_id(db: &Db, args: &Value) -> Result<Option<String>> {
     }
 
     if let Some(file) = args["file_path"].as_str() {
-        // First try direct file_path match (handles full relative paths)
         if let Some(id) = queries::get_file_node_id(&db.conn, file)? {
             return Ok(Some(id));
         }
-        // Fall back to FTS name search (handles bare filename like "GraphDatabase.ts")
         let nodes = queries::search_nodes(&db.conn, file, 10)?;
         return Ok(nodes
             .into_iter()

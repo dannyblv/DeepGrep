@@ -147,9 +147,9 @@ function dgGetContext(db: GraphDatabase, symbol: string): QueryResult {
     token_estimate: tokenEstimate(text),
     structured: true,
     hits: [
-      ...(result.node ? [`${result.node.name} @ ${result.node.file_path}:${result.node.start_line}`] : []),
-      ...result.callers.map((n: NonNullable<ReturnType<GraphDatabase['getNode']>>) => `caller: ${n.name}`),
-      ...result.callees.map((n: NonNullable<ReturnType<GraphDatabase['getNode']>>) => `callee: ${n.name}`),
+      ...(result.node ? [`${result.node.name} @ ${result.node.file}:${result.node.lines}`] : []),
+      ...result.callers.map((n: CompactNode) => `caller: ${n.name}`),
+      ...result.callees.map((n: CompactNode) => `callee: ${n.name}`),
     ],
   };
 }
@@ -171,11 +171,13 @@ function dgDependencyChain(db: GraphDatabase, symbol: string): QueryResult {
     raw_chars: text.length,
     token_estimate: tokenEstimate(text),
     structured: true,
-    hits: result.deps.map((n: NonNullable<ReturnType<GraphDatabase['getNode']>>) => `${n.name} (${n.type})`),
+    hits: result.deps.map((n: CompactNode) => `${n.name} (${n.type})`),
   };
 }
 
-function compact(n: { name: string; type: string; file_path: string; start_line: number; end_line: number }) {
+type CompactNode = { name: string; type: string; file: string; lines: string };
+
+function compact(n: { name: string; type: string; file_path: string; start_line: number; end_line: number }): CompactNode {
   return { name: n.name, type: n.type, file: n.file_path, lines: `${n.start_line}-${n.end_line}` };
 }
 

@@ -1,0 +1,239 @@
+{
+  "run_at": "2026-04-27T14:11:09.159Z",
+  "mcp_binary": "/Users/danny.braunstein/Desktop/Danny/DeepGrep/target/release/deepgrep-mcp",
+  "workspace": "/Users/danny.braunstein/Desktop/Danny/DeepGrep",
+  "summary": {
+    "dgWins": 8,
+    "blWins": 2,
+    "ties": 1,
+    "total": 11,
+    "avgDgLatencyMs": 7,
+    "avgBlLatencyMs": 390,
+    "avgDgTokens": 178,
+    "avgBlTokens": 24890,
+    "overallTokenSavePct": 99,
+    "overallSpeedup": 55.71
+  },
+  "results": [
+    {
+      "label": "Symbol lookup: \"discover_files\"",
+      "tool": "search_graph",
+      "category": "symbol-lookup",
+      "deepgrep": {
+        "latencyMs": 6,
+        "tokens": 66,
+        "chars": 261,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\n> ⚠ Index is 6m+ stale — edits since last index are invisible. Run **Re-index Workspace** for accurate results.\n\nFound 1 node(s) matching \"discover_files\":\n\n- **discover_files** `function` (packages/indexer/src/indexer/walker.rs) 19:35\n"
+      },
+      "baseline": {
+        "latencyMs": 111,
+        "tokens": 80,
+        "chars": 318
+      },
+      "winner": "deepgrep",
+      "tokenSavePct": 18,
+      "speedupStr": "18.5x"
+    },
+    {
+      "label": "Symbol lookup: \"GraphDatabase\"",
+      "tool": "search_graph",
+      "category": "symbol-lookup",
+      "deepgrep": {
+        "latencyMs": 5,
+        "tokens": 241,
+        "chars": 961,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\n> ⚠ Index is 6m+ stale — edits since last index are invisible. Run **Re-index Workspace** for accurate results.\n\nFound 10 node(s) matching \"GraphDatabase\":\n\n- **GraphDatabase** `import` (benchmarks/deepgrep-vs-vexp.ts) 38:38\n- **GraphDatabase** `import` (packages/extension/s"
+      },
+      "baseline": {
+        "latencyMs": 54,
+        "tokens": 3052,
+        "chars": 12205
+      },
+      "winner": "deepgrep",
+      "tokenSavePct": 92,
+      "speedupStr": "10.8x"
+    },
+    {
+      "label": "Context: \"dispatch\"",
+      "tool": "get_context_for_symbol",
+      "category": "callers-callees",
+      "deepgrep": {
+        "latencyMs": 4,
+        "tokens": 197,
+        "chars": 785,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\n> ⚠ Index is 6m+ stale — edits since last index are invisible. Run **Re-index Workspace** for accurate results.\n\n## `dispatch` (function) — packages/mcp/src/tools/mod.rs:20\n\n### Source\n```\npub fn dispatch(db: &Db, tool_name: &str, args: &Value, token_budget: usize) -> Result"
+      },
+      "baseline": {
+        "latencyMs": 62,
+        "tokens": 8072,
+        "chars": 32286
+      },
+      "winner": "deepgrep",
+      "tokenSavePct": 98,
+      "speedupStr": "15.5x"
+    },
+    {
+      "label": "Context: \"indexFile\"",
+      "tool": "get_context_for_symbol",
+      "category": "callers-callees",
+      "deepgrep": {
+        "latencyMs": 5,
+        "tokens": 305,
+        "chars": 1218,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\n> ⚠ Index is 6m+ stale — edits since last index are invisible. Run **Re-index Workspace** for accurate results.\n\n## `indexFile` (function) — packages/extension/src/indexer/TreeSitterIndexer.ts:62\n\n### Source\n```\nindexFile(filePath: string, workspaceRoot: string): IndexResult"
+      },
+      "baseline": {
+        "latencyMs": 69,
+        "tokens": 3469,
+        "chars": 13875
+      },
+      "winner": "deepgrep",
+      "tokenSavePct": 91,
+      "speedupStr": "13.8x"
+    },
+    {
+      "label": "Dep chain: \"cmd_index\"",
+      "tool": "get_dependency_chain",
+      "category": "dependency-chain",
+      "deepgrep": {
+        "latencyMs": 4,
+        "tokens": 62,
+        "chars": 247,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\n> ⚠ Index is 6m+ stale — edits since last index are invisible. Run **Re-index Workspace** for accurate results.\n\n## Dependency chain for `cmd_index` (1 deps, cap 50)\n\n- `chrono_now` (function) packages/indexer/src/main.rs\n"
+      },
+      "baseline": {
+        "latencyMs": 64,
+        "tokens": 75,
+        "chars": 299
+      },
+      "winner": "tie",
+      "tokenSavePct": 17,
+      "speedupStr": "16.0x"
+    },
+    {
+      "label": "Related nodes: walker.rs (2 hops)",
+      "tool": "find_related_nodes",
+      "category": "graph-traversal",
+      "deepgrep": {
+        "latencyMs": 5,
+        "tokens": 314,
+        "chars": 1254,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\n> ⚠ Index is 6m+ stale — edits since last index are invisible. Run **Re-index Workspace** for accurate results.\n\n## Related nodes for `walker.rs` (file) — 3 found within 2 hop(s)\n\n\n### Hop 1\n\n#### `discover_files` (function) — packages/indexer/src/indexer/walker.rs:19-35\n```"
+      },
+      "baseline": {
+        "latencyMs": 7,
+        "tokens": 62,
+        "chars": 245
+      },
+      "winner": "baseline",
+      "tokenSavePct": -406,
+      "speedupStr": "1.4x"
+    },
+    {
+      "label": "FTS: \"DEEPGREP_TOKEN_BUDGET\"",
+      "tool": "search_text",
+      "category": "text-search",
+      "deepgrep": {
+        "latencyMs": 4,
+        "tokens": 37,
+        "chars": 148,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\nFound 1 content match(es) for \"DEEPGREP_TOKEN_BUDGET\":\n\n- **packages/mcp/src/main.rs:17** (string) `DEEPGREP_TOKEN_BUDGET`\n"
+      },
+      "baseline": {
+        "latencyMs": 51,
+        "tokens": 1920,
+        "chars": 7677
+      },
+      "winner": "deepgrep",
+      "tokenSavePct": 98,
+      "speedupStr": "12.8x"
+    },
+    {
+      "label": "FTS: \"schema_version\"",
+      "tool": "search_text",
+      "category": "text-search",
+      "deepgrep": {
+        "latencyMs": 4,
+        "tokens": 248,
+        "chars": 992,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\nFound 10 content match(es) for \"schema_version\":\n\n- **packages/extension/src/__tests__/GraphDatabase.test.ts:338** (string) `schema_version is set to \"2\"`\n- **packages/extension/src/db/GraphDatabase.ts:156** (string) `schema_version`\n- **packages/extension/src/db/GraphDataba"
+      },
+      "baseline": {
+        "latencyMs": 67,
+        "tokens": 47107,
+        "chars": 188427
+      },
+      "winner": "deepgrep",
+      "tokenSavePct": 99,
+      "speedupStr": "16.8x"
+    },
+    {
+      "label": "rg: \"deepgrep-mcp\" in JSON",
+      "tool": "search_rg",
+      "category": "live-search",
+      "deepgrep": {
+        "latencyMs": 13,
+        "tokens": 107,
+        "chars": 428,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\nFound 3 match(es) for \"deepgrep-mcp\" (live rg search):\n\n- **packages/mcp-server/package.json:2** — `\"name\": \"deepgrep-mcp-server\",`\n- **packages/mcp-server/package.json:9** — `\"deepgrep-mcp\": \"./dist/index.js\"`\n- **.mcp.json:4** — `\"command\": \"/Users/danny.braunstein/Desktop"
+      },
+      "baseline": {
+        "latencyMs": 2404,
+        "tokens": 1360,
+        "chars": 5440
+      },
+      "winner": "deepgrep",
+      "tokenSavePct": 92,
+      "speedupStr": "184.9x"
+    },
+    {
+      "label": "rg: regex pattern (schema.*[0-9])",
+      "tool": "search_rg",
+      "category": "live-search",
+      "deepgrep": {
+        "latencyMs": 17,
+        "tokens": 295,
+        "chars": 1180,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\nFound 10 match(es) for \"schema.*[0-9]\" (live rg search):\n\n- **packages/indexer/src/db/mod.rs:9** — `use schema::{CONTENT_FTS_SQL, FTS_SQL, MIGRATIONS_V3, SCHEMA_SQL, SCHEMA_VERSION};`\n- **packages/mcp-server/src/db.ts:304** — `const sv = (this._metaGet.get('schema_version') "
+      },
+      "baseline": {
+        "latencyMs": 1372,
+        "tokens": 208591,
+        "chars": 834363
+      },
+      "winner": "deepgrep",
+      "tokenSavePct": 100,
+      "speedupStr": "80.7x"
+    },
+    {
+      "label": "Index health check",
+      "tool": "get_stats",
+      "category": "meta",
+      "deepgrep": {
+        "latencyMs": 5,
+        "tokens": 84,
+        "chars": 334,
+        "isError": false,
+        "textPreview": "## ⬡ DeepGrep V1 Result\n\n## ⬡ DeepGrep Index Stats\n- **Nodes**: 3658\n- **Edges**: 3906\n- **Schema version**: 4\n- **Last indexed**: 6m ago\n- **Index duration**: 132ms\n\n**Coverage note**: Index tracks function/class/interface/import names. String literals, comments, JSX prop values, and config keys ar"
+      },
+      "baseline": {
+        "latencyMs": 25,
+        "tokens": 6,
+        "chars": 23
+      },
+      "winner": "baseline",
+      "tokenSavePct": -1300,
+      "speedupStr": "5.0x"
+    }
+  ]
+}

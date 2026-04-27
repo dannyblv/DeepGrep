@@ -1,0 +1,284 @@
+{
+  "run_at": "2026-04-27T14:38:45.011Z",
+  "workspace": "/Users/danny.braunstein/Desktop/10bis-next",
+  "summary": {
+    "dgWins": 11,
+    "blWins": 0,
+    "ties": 1,
+    "total": 12,
+    "avgDgMs": 12,
+    "avgBlMs": 895,
+    "avgDgTok": 254,
+    "avgBlTok": 5215,
+    "overallSave": 95,
+    "overallSpeed": 74.6
+  },
+  "results": [
+    {
+      "label": "Symbol: \"Checkout\"",
+      "tool": "search_graph",
+      "dgArgs": {
+        "query": "Checkout",
+        "limit": 8
+      },
+      "cat": "symbol",
+      "dg": {
+        "ms": 7,
+        "tokens": 160,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\nFound 8 node(s) matching \"Checkout\":\n\n- **Checkout** `import` (src/modals/components/CheckoutModal.js) 9:9\n- **Checkout** `function` (src/checkout/components/Checkout/Checkout.js) 171:553\n- **~/checkout** `import` (src/modals"
+      },
+      "bl": {
+        "ms": 96,
+        "tokens": 531
+      },
+      "winner": "deepgrep",
+      "savePct": 70,
+      "speedup": "13.7x"
+    },
+    {
+      "label": "Symbol: \"Restaurant\"",
+      "tool": "search_graph",
+      "dgArgs": {
+        "query": "Restaurant",
+        "limit": 8
+      },
+      "cat": "symbol",
+      "dg": {
+        "ms": 8,
+        "tokens": 200,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\nFound 8 node(s) matching \"Restaurant\":\n\n- **../restaurant** `import` (src/shared/utils/restaurants/restaurantStatus.ts) 6:6\n- **restaurant.ts** `file` (src/shared/utils/restaurant.ts) 0:60\n- **UiRestaurants** `interface` (src"
+      },
+      "bl": {
+        "ms": 92,
+        "tokens": 2624
+      },
+      "winner": "deepgrep",
+      "savePct": 92,
+      "speedup": "11.5x"
+    },
+    {
+      "label": "Symbol: \"OrderSuccessData\"",
+      "tool": "search_graph",
+      "dgArgs": {
+        "query": "OrderSuccessData",
+        "limit": 8
+      },
+      "cat": "symbol",
+      "dg": {
+        "ms": 5,
+        "tokens": 204,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\nFound 8 node(s) matching \"OrderSuccessData\":\n\n- **OrderSuccessData** `import` (src/orderSuccess/utils.ts) 5:5\n- **OrderSuccessData** `import` (src/orderSuccess/components/OrderSuccessView/MapAndOrderBlock/InProgressTracker/He"
+      },
+      "bl": {
+        "ms": 92,
+        "tokens": 2081
+      },
+      "winner": "deepgrep",
+      "savePct": 90,
+      "speedup": "18.4x"
+    },
+    {
+      "label": "Context: \"Checkout\" component",
+      "tool": "get_context_for_symbol",
+      "dgArgs": {
+        "symbol": "Checkout",
+        "file_path": "Checkout.js"
+      },
+      "cat": "context",
+      "dg": {
+        "ms": 6,
+        "tokens": 430,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\n## `Checkout` (function) — src/checkout/components/Checkout/Checkout.js:171\n\n### Source\n```\nCheckout = ({\n  returnToCheckoutOnClose,\n  showHeader,\n  closeModalOnBack,\n  centerSubmitBtn,\n  showAddressLabelPrefix,\n  hidePayment"
+      },
+      "bl": {
+        "ms": 8,
+        "tokens": 5436
+      },
+      "winner": "deepgrep",
+      "savePct": 92,
+      "speedup": "1.3x"
+    },
+    {
+      "label": "Context: \"getErrorByActionSuggestion\"",
+      "tool": "get_context_for_symbol",
+      "dgArgs": {
+        "symbol": "getErrorByActionSuggestion"
+      },
+      "cat": "context",
+      "dg": {
+        "ms": 4,
+        "tokens": 65,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\n## `getErrorByActionSuggestion` (import) — src/shared/utils/checkout.test.js:0\n\n### Source\n```\nimport { getErrorByActionSuggestion } from './checkout'\n```\n\n### Callers (1)\n- `src/shared/utils/checkout.test.js:file:checkout.te"
+      },
+      "bl": {
+        "ms": 99,
+        "tokens": 191
+      },
+      "winner": "deepgrep",
+      "savePct": 66,
+      "speedup": "24.8x"
+    },
+    {
+      "label": "DepChain: \"Checkout\" (49 deps)",
+      "tool": "get_dependency_chain",
+      "dgArgs": {
+        "symbol": "Checkout",
+        "file_path": "Checkout.js"
+      },
+      "cat": "dep-chain",
+      "dg": {
+        "ms": 6,
+        "tokens": 1016,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\n## Dependency chain for `Checkout` (49 deps, cap 50)\n\n- `CheckoutCloseButton` (function) src/checkout/components/Checkout/ModalHeader.js\n- `enablePayment` (function) src/checkout/components/Checkout/CheckoutPaymentMethodLine."
+      },
+      "bl": {
+        "ms": 8,
+        "tokens": 5436
+      },
+      "winner": "deepgrep",
+      "savePct": 81,
+      "speedup": "1.3x"
+    },
+    {
+      "label": "Related: checkout/ (2 hops, slim)",
+      "tool": "find_related_nodes",
+      "dgArgs": {
+        "file_path": "Checkout.js",
+        "hops": 2
+      },
+      "cat": "related",
+      "dg": {
+        "ms": 6,
+        "tokens": 72,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\n## Related nodes for `checkout.js` (file) — 2 found within 2 hop(s) (slim)\n\n\n### Hop 1\n\n- `getErrorByActionSuggestion` (function) src/shared/utils/checkout.js:0-22\n\n### Hop 2\n\n- `callGetErrorByActionSuggestion` (function) src"
+      },
+      "bl": {
+        "ms": 7,
+        "tokens": 5436
+      },
+      "winner": "deepgrep",
+      "savePct": 99,
+      "speedup": "1.2x"
+    },
+    {
+      "label": "Related: checkout/ (1 hop, full)",
+      "tool": "find_related_nodes",
+      "dgArgs": {
+        "file_path": "Checkout.js",
+        "hops": 1,
+        "slim": false
+      },
+      "cat": "related",
+      "dg": {
+        "ms": 5,
+        "tokens": 125,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\n## Related nodes for `checkout.js` (file) — 1 found within 1 hop(s)\n\n\n### Hop 1\n\n#### `getErrorByActionSuggestion` (function) — src/shared/utils/checkout.js:0-22\n```\ngetErrorByActionSuggestion = ({actionSuggestionType, openCr"
+      },
+      "bl": {
+        "ms": 7,
+        "tokens": 5436
+      },
+      "winner": "deepgrep",
+      "savePct": 98,
+      "speedup": "1.4x"
+    },
+    {
+      "label": "FTS: \"restaurant not found\"",
+      "tool": "search_text",
+      "dgArgs": {
+        "query": "restaurant not found",
+        "limit": 10
+      },
+      "cat": "text-search",
+      "dg": {
+        "ms": 5,
+        "tokens": 48,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\nFound 1 content match(es) for \"restaurant not found\":\n\n- **src/shared/services/analytics/analytics.ts:484** (string) `restaurant not found in hasSelectedRestaurant`\n"
+      },
+      "bl": {
+        "ms": 109,
+        "tokens": 40
+      },
+      "winner": "tie",
+      "savePct": -20,
+      "speedup": "21.8x"
+    },
+    {
+      "label": "FTS: \"payment\"",
+      "tool": "search_text",
+      "dgArgs": {
+        "query": "payment",
+        "limit": 10
+      },
+      "cat": "text-search",
+      "dg": {
+        "ms": 5,
+        "tokens": 216,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\nFound 10 content match(es) for \"payment\":\n\n- **common/consts.js:21** (string) `payments`\n- **common/consts.js:177** (string) `/payments`\n- **e2e/tests/personalArea.spec.ts:103** (string) `Payment Methods tab – validate cards "
+      },
+      "bl": {
+        "ms": 102,
+        "tokens": 35093
+      },
+      "winner": "deepgrep",
+      "savePct": 99,
+      "speedup": "20.4x"
+    },
+    {
+      "label": "rg: API_BASE_URL in env files",
+      "tool": "search_rg",
+      "dgArgs": {
+        "query": "API_BASE_URL",
+        "glob": "*.env",
+        "limit": 10
+      },
+      "cat": "live-rg",
+      "dg": {
+        "ms": 19,
+        "tokens": 256,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\nFound 10 match(es) for \"API_BASE_URL\" (live rg search):\n\n- **env/je/production.env:1** — `API_BASE_URL=https://www.just-eat.co.il/`\n- **env/je/production.env:2** — `NEW_API_BASE_URL=https://api.just-eat.co.il/`\n- **env/je/dev"
+      },
+      "bl": {
+        "ms": 10002,
+        "tokens": 0
+      },
+      "winner": "deepgrep",
+      "savePct": 0,
+      "speedup": "526.4x"
+    },
+    {
+      "label": "rg: \"sentry\" in config",
+      "tool": "search_rg",
+      "dgArgs": {
+        "query": "sentry",
+        "glob": "*.{json,js,ts}",
+        "limit": 10
+      },
+      "cat": "live-rg",
+      "dg": {
+        "ms": 66,
+        "tokens": 254,
+        "isError": false,
+        "preview": "## ⬡ DeepGrep V1 Result\n\nFound 10 match(es) for \"sentry\" (live rg search):\n\n- **package.json:101** — `\"@sentry/browser\": \"^7.119.1\",`\n- **package.json:139** — `\"@sentry/react\": \"^9.34.0\",`\n- **package.json:140** — `\"@sentry/tracing\": \"^7.120.3\",`\n- *"
+      },
+      "bl": {
+        "ms": 118,
+        "tokens": 276
+      },
+      "winner": "deepgrep",
+      "savePct": 8,
+      "speedup": "1.8x"
+    }
+  ]
+}

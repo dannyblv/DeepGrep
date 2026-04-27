@@ -49,18 +49,27 @@ fn rg_fallback(query: &str, limit: usize) -> Vec<Value> {
         return vec![];
     }
 
-    let output = std::process::Command::new("rg")
-        .args([
-            "--json",
-            "-n",
-            "-i",
-            "--max-count", "3",
-            "-g", "*.{ts,tsx,js,jsx,rs,go,py}",
-            "--",
-            query,
-            &workspace,
-        ])
-        .output();
+    let (rg_bin, use_arg0) = super::search_rg::resolve_rg_binary();
+
+    let output = {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            let mut cmd = std::process::Command::new(&rg_bin);
+            cmd.args(["--json", "-n", "-i", "--max-count", "3",
+                "-g", "*.{ts,tsx,js,jsx,rs,go,py}", "--", query, &workspace]);
+            if use_arg0 { cmd.arg0("rg"); }
+            cmd.output()
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = use_arg0;
+            std::process::Command::new(&rg_bin)
+                .args(["--json", "-n", "-i", "--max-count", "3",
+                    "-g", "*.{ts,tsx,js,jsx,rs,go,py}", "--", query, &workspace])
+                .output()
+        }
+    };
 
     let stdout = match output {
         Ok(o) if !o.stdout.is_empty() => String::from_utf8_lossy(&o.stdout).into_owned(),

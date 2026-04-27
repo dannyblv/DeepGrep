@@ -92,15 +92,44 @@ pub fn tool_list() -> Vec<ToolDef> {
         },
         ToolDef {
             name: "find_related_nodes",
-            description: "Nodes within N hops of a file or symbol.",
+            description: "Nodes within N hops of a file or symbol. Automatically uses slim mode (no code snippets) when hops >= 2 or result count > 8 to minimise token usage. Pass slim=false to force full snippets.",
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
-                    "symbol": {"type": "string"},
+                    "symbol":    {"type": "string"},
                     "file_path": {"type": "string"},
-                    "hops": {"type": "number", "minimum": 1, "maximum": 5, "default": 2},
-                    "agent_id": {"type": "string"}
+                    "hops":      {"type": "number", "minimum": 1, "maximum": 5, "default": 2},
+                    "slim":      {"type": "boolean", "description": "Strip code snippets (auto-true when hops>=2 or results>8)"},
+                    "max_nodes": {"type": "number", "minimum": 1, "maximum": 200, "default": 60},
+                    "agent_id":  {"type": "string"}
                 }
+            }),
+        },
+        ToolDef {
+            name: "search_text",
+            description: "Search string literals and comments across all indexed files. Use for error messages, config keys in source code, JSX prop values, and TODO comments.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "number", "minimum": 1, "maximum": 50, "default": 20},
+                    "kind":  {"type": "string", "enum": ["string", "comment"]}
+                },
+                "required": ["query"]
+            }),
+        },
+        ToolDef {
+            name: "search_rg",
+            description: "Live ripgrep search over the workspace filesystem. Searches ALL file types (json, yaml, toml, env, etc.) and always reflects current disk state. Use for config keys, env vars, regex patterns, and anything not yet indexed. Prefer search_graph for symbol names and search_text for indexed literals.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "query":  {"type": "string", "description": "Text or regex pattern to search for"},
+                    "glob":   {"type": "string", "description": "File glob filter, e.g. '*.json' or '*.{ts,tsx}'"},
+                    "limit":  {"type": "number", "minimum": 1, "maximum": 100, "default": 20},
+                    "regex":  {"type": "boolean", "default": false, "description": "Treat query as a regex pattern"}
+                },
+                "required": ["query"]
             }),
         },
         ToolDef {

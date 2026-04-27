@@ -3,6 +3,7 @@ pub mod deps;
 pub mod memory;
 pub mod related;
 pub mod search;
+pub mod search_rg;
 pub mod search_text;
 pub mod stats;
 
@@ -21,6 +22,7 @@ pub fn dispatch(db: &Db, tool_name: &str, args: &Value, token_budget: usize) -> 
     match tool_name {
         "search_graph" => search::run(db, args),
         "search_text" => search_text::run(db, args),
+        "search_rg" => search_rg::run(args),
         "get_context_for_symbol" => context::run(db, args, token_budget),
         "get_dependency_chain" => deps::run(db, args, token_budget),
         "find_related_nodes" => related::run(db, args),
